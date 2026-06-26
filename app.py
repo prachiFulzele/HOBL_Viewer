@@ -137,6 +137,31 @@ def api_datasource_clear():
     return jsonify({"total": _uploaded_json_count()})
 
 
+@app.route("/ai")
+def ai_page():
+    """Optional AI Analysis page (natural-language → table/insights/chart)."""
+    return render_template("ai.html")
+
+
+@app.route("/api/ai/analyze", methods=["POST"])
+def api_ai_analyze():
+    """Run a natural-language analysis against the active data source.
+
+    Body: ``{"question": str, "context": {"spec": <previous query plan>}?}``.
+    When ``context.spec`` is present the question refines that existing view.
+    """
+    import ai_analysis
+
+    payload = request.get_json(silent=True) or {}
+    question = payload.get("question", "")
+    context = payload.get("context")
+    clarification = payload.get("clarification")
+    try:
+        return jsonify(ai_analysis.analyze(question, context, clarification))
+    except Exception as exc:  # surfaced to the UI as a friendly error
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/api/filters")
 def api_filters():
     """Return distinct values for each independent, optional filter."""

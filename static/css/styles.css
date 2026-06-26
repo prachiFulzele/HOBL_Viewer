@@ -115,6 +115,26 @@
         .ds-msg.is-error { background: #fdecea; color: #c0392b; }
         .ds-actions { display: flex; justify-content: flex-end; }
 
+        .brand-logo {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: block;
+        }
+
+        .ai-link {
+            margin-left: auto;
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            border: 1px solid rgba(255,255,255,0.6);
+            padding: 7px 14px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ai-link:hover { background: rgba(255,255,255,0.15); }
+
         .container {
             max-width: 1800px;
             margin: 24px auto;
