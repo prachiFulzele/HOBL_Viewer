@@ -150,14 +150,14 @@ def api_ai_analyze():
     Body: ``{"question": str, "context": {"spec": <previous query plan>}?}``.
     When ``context.spec`` is present the question refines that existing view.
     """
-    import ai_analysis
+    import nl2kql
 
     payload = request.get_json(silent=True) or {}
     question = payload.get("question", "")
     context = payload.get("context")
     clarification = payload.get("clarification")
     try:
-        return jsonify(ai_analysis.analyze(question, context, clarification))
+        return jsonify(nl2kql.analyze(question, context, clarification, backend=get_backend()))
     except Exception as exc:  # surfaced to the UI as a friendly error
         return jsonify({"error": str(exc)}), 500
 

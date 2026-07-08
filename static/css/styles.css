@@ -33,7 +33,6 @@
 
         /* ── Data-source indicator (top-right of header) ── */
         .ds-indicator {
-            margin-left: auto;
             display: flex;
             align-items: center;
             gap: 8px;
@@ -122,6 +121,7 @@
 
         .ai-link {
             margin-left: auto;
+            margin-right: 12px;
             color: white;
             text-decoration: none;
             font-size: 14px;

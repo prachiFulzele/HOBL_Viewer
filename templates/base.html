@@ -14,15 +14,15 @@
 <header>
     <img class="brand-logo" src="{{ url_for('static', filename='img/H.png') }}" alt="HOBL logo">
     <h1>{% block heading %}HOBL Dashboard{% endblock %}</h1>
+    <a class="ai-link" href="/ai">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2a2 2 0 0 1 2 2v1.07A7.002 7.002 0 0 1 19 12v3l1.5 2.5A1 1 0 0 1 19.6 19H4.4a1 1 0 0 1-.9-1.5L5 15v-3a7.002 7.002 0 0 1 5-6.93V4a2 2 0 0 1 2-2z"/></svg>
+        AI Analysis
+    </a>
     <button type="button" class="ds-indicator" id="dsIndicator" title="Data source — click to change">
         <span class="ds-dot" id="dsDot"></span>
         <span class="ds-label" id="dsLabel">Loading…</span>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.03 7.03 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.59.24-1.13.56-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.74 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.14.24.42.32.66.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.25.42.5.42h3.84c.25 0 .45-.18.5-.42l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.24.1.52 0 .66-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z"/></svg>
     </button>
-    <a class="ai-link" href="/ai">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2a2 2 0 0 1 2 2v1.07A7.002 7.002 0 0 1 19 12v3l1.5 2.5A1 1 0 0 1 19.6 19H4.4a1 1 0 0 1-.9-1.5L5 15v-3a7.002 7.002 0 0 1 5-6.93V4a2 2 0 0 1 2-2z"/></svg>
-        AI Analysis
-    </a>
 </header>
 
 <!-- Data-source settings modal -->

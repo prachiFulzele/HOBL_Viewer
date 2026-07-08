@@ -837,7 +837,17 @@ async function runAnalysis(question, { refine = false, clarification = null } = 
     if (refine) {
         const base = ViewStore.active();
         if (base && base.data && base.data.spec) {
-            body.context = { spec: base.data.spec, question: base.question };
+            // Send the active view's plan AND the result on screen, so the model
+            // drills down on what the user is actually looking at.
+            body.context = {
+                spec: base.data.spec,
+                question: base.question,
+                result: {
+                    title: base.data.title,
+                    columns: base.data.columns,
+                    rows: (base.data.rows || []).slice(0, 8),
+                },
+            };
         }
     }
 
