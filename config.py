@@ -12,10 +12,6 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 #
 # Both backends expose the SAME query surface and schema, so switching sources
 # is a one-line change here once the branch is merged.
-#
-# This is only the DEFAULT source on first run. The active source can be changed
-# at runtime from the dashboard UI (top-right data-source control); the choice is
-# persisted to RUNTIME_STATE_FILE and survives restarts.
 DATA_SOURCE = "json"
 
 # In JSON mode, the dashboard reads ONLY from files the user uploads through the
@@ -25,9 +21,9 @@ UPLOAD_DIR = os.path.join(_HERE, "uploaded_json")
 # Persists the runtime-selected data source across restarts.
 RUNTIME_STATE_FILE = os.path.join(_HERE, "runtime_state.json")
 
-KUSTO_CLUSTER = os.getenv("KUSTO_CLUSTER", "https://<your-cluster>.kusto.windows.net")
-KUSTO_DATABASE = os.getenv("KUSTO_DATABASE", "<your-database>")
-KUSTO_TABLE = os.getenv("KUSTO_TABLE", "<your-table>")
+KUSTO_CLUSTER = os.getenv("KUSTO_CLUSTER", "https://fungateprd.centralus.kusto.windows.net")
+KUSTO_DATABASE = os.getenv("KUSTO_DATABASE", "FungatesDataStore")
+KUSTO_TABLE = os.getenv("KUSTO_TABLE", "Hobl_RawMetrics")
 
 # Flask settings
 HOST = "127.0.0.1"
@@ -41,7 +37,7 @@ DEBUG = True
 # overridden via environment variables (e.g. a local .env exported into the env).
 AZURE_OPENAI_ENDPOINT = os.getenv(
     "AZURE_OPENAI_ENDPOINT",
-    "https://<your-resource>.cognitiveservices.azure.com",
+    "https://nl2kql-project-resource.cognitiveservices.azure.com",
 ).rstrip("/")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5-mini")
 AZURE_OPENAI_API_VERSION = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
