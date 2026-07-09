@@ -21,3 +21,10 @@ Thumbs.db
 # Runtime data-source state + user-uploaded JSON files
 runtime_state.json
 uploaded_json/
+
+# Local Kusto check / diagnostic scripts (not part of the app)
+kusto_check.py
+kusto_diag.py
+kusto_meta_keys.py
+kusto_meta_verify.py
+_dupcheck.py

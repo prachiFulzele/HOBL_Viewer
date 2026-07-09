@@ -22,6 +22,10 @@
             <div class="multiselect" id="scenarioMS"></div>
         </div>
         <div class="filter-group">
+            <label>Host Name</label>
+            <div class="multiselect" id="hostMS"></div>
+        </div>
+        <div class="filter-group">
             <label>Start Date</label>
             <input type="date" id="startDate">
         </div>
@@ -33,10 +37,6 @@
             <label>Last N Iterations</label>
             <input type="number" id="lastN" min="1" step="1" placeholder="All">
         </div>
-        <div class="filter-actions">
-            <button id="applyBtn" class="btn btn-primary">Apply</button>
-            <button id="resetBtn" class="btn btn-secondary">Reset</button>
-        </div>
         <div class="filter-group">
             <label>View</label>
             <select id="viewSelect">
@@ -45,6 +45,10 @@
                 <option value="box">Box &amp; Whisker</option>
                 <option value="percentile">Percentile Distribution</option>
             </select>
+        </div>
+        <div class="filter-actions">
+            <button id="applyBtn" class="btn btn-primary">Apply</button>
+            <button id="resetBtn" class="btn btn-secondary">Reset</button>
         </div>
     </div>
 

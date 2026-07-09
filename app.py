@@ -191,6 +191,7 @@ def _parse_filters():
         "device": _list("device"),
         "ram": _list("ram"),
         "scenario": _list("scenario"),
+        "host": _list("host"),
         "start_date": request.args.get("start_date", ""),
         "end_date": request.args.get("end_date", ""),
         "last_n": _int("last_n"),
@@ -206,7 +207,7 @@ def api_metrics():
     try:
         return jsonify(
             get_backend().get_metrics(
-                f["device"], f["ram"], f["scenario"], f["start_date"],
+                f["device"], f["ram"], f["scenario"], f["host"], f["start_date"],
                 f["end_date"], f["last_n"], f["start_iter"], f["end_iter"],
             )
         )
@@ -221,7 +222,7 @@ def api_table():
     try:
         return jsonify(
             get_backend().get_table_data(
-                f["device"], f["ram"], f["scenario"], f["start_date"],
+                f["device"], f["ram"], f["scenario"], f["host"], f["start_date"],
                 f["end_date"], f["last_n"], f["start_iter"], f["end_iter"],
             )
         )

@@ -189,7 +189,7 @@ def _joined(filter_clauses: list[str]) -> str:
         + f"{config.KUSTO_TABLE}\n"
         "| extend TRID = tostring(TestResultId)\n"
         "| join kind=inner (_meta) on TRID\n"
-        "| extend Device = M_Device, Ram = M_Ram\n"
+        "| extend Device = M_Device, Ram = M_Ram, Host = M_Host\n"
         "| extend Tier = iif(isnotempty(M_Tier), M_Tier, TierDisplayName)\n"
         "| extend _prefix = strcat(Device, '_', Ram, '_')\n"
         "| extend _scnFromTier = iif(isnotempty(Device) and isnotempty(Ram) and "
@@ -206,9 +206,9 @@ def _joined(filter_clauses: list[str]) -> str:
     return base
 
 
-def _build_filters(device, ram, scenario, start_date, end_date) -> list[str]:
+def _build_filters(device, ram, scenario, host, start_date, end_date) -> list[str]:
     clauses = []
-    for col, val in (("Device", device), ("Ram", ram), ("Scenario", scenario)):
+    for col, val in (("Device", device), ("Ram", ram), ("Scenario", scenario), ("Host", host)):
         clause = _in_clause(col, val)
         if clause:
             clauses.append(clause)
@@ -335,13 +335,14 @@ def _apply_iter_range(rows: list[dict], start_iter, end_iter) -> list[dict]:
 
 def get_filter_options() -> dict:
     """Distinct values for each independent filter, across all joined data."""
-    kql = _joined([]) + "| summarize by Device, Ram, Scenario, Date"
+    kql = _joined([]) + "| summarize by Device, Ram, Scenario, Host, Date"
     rows = _run_query(kql)
     rams = sorted({r["Ram"] for r in rows if r.get("Ram")}, key=_ram_sort_key)
     return {
         "devices": sorted({r["Device"] for r in rows if r.get("Device")}),
         "rams": rams,
         "scenarios": sorted({r["Scenario"] for r in rows if r.get("Scenario")}),
+        "hostnames": sorted({r["Host"] for r in rows if r.get("Host")}),
         "dates": sorted({r["Date"] for r in rows if r.get("Date")}, reverse=True),
     }
 
@@ -350,6 +351,7 @@ def get_metrics(
     device: str = "",
     ram: str = "",
     scenario: str = "",
+    host: str = "",
     start_date: str = "",
     end_date: str = "",
     last_n=None,
@@ -358,7 +360,7 @@ def get_metrics(
 ) -> list[dict]:
     """Metrics matching the filters, one row per metric value. PerfMetrics names
     are split into ``MetricName`` (base) + ``Pt``; power names pass through."""
-    clauses = _build_filters(device, ram, scenario, start_date, end_date)
+    clauses = _build_filters(device, ram, scenario, host, start_date, end_date)
     kql = (
         _joined(clauses)
         + "| project Device, Ram, Scenario, Date, RunTs, TRID, Iteration, M_IterNum,\n"
@@ -415,6 +417,7 @@ def get_table_data(
     device: str = "",
     ram: str = "",
     scenario: str = "",
+    host: str = "",
     start_date: str = "",
     end_date: str = "",
     last_n=None,
@@ -423,7 +426,7 @@ def get_table_data(
 ) -> list[dict]:
     """Per-iteration columns for the transposed table view (parity with
     ``json_data.get_table_data``). One column per ``TestResultId``."""
-    clauses = _build_filters(device, ram, scenario, start_date, end_date)
+    clauses = _build_filters(device, ram, scenario, host, start_date, end_date)
     kql = (
         _joined(clauses)
         + "| project Device, Ram, Scenario, Date, RunTs, Iteration, M_IterNum, SuffixIter,\n"

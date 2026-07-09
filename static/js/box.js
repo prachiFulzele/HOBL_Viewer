@@ -7,8 +7,8 @@
 // escapeHtml, activeFilterSummary, resultsDiv, metricModal, modalTitle.
 
 const BOX_TYPES = [
-    { type: 'PowerMetrics', title: 'Power Metrics', id: 'boxPower' },
     { type: 'PowerCalculation', title: 'Power Calculation', id: 'boxCalc' },
+    { type: 'PowerMetrics', title: 'Power Metrics', id: 'boxPower' },
 ];
 
 function median(values) {
@@ -32,16 +32,9 @@ function renderBoxplots(metrics) {
 
     buildDeviceColorMap(metrics);
     let html = `<div class="results-summary">${activeFilterSummary()} &nbsp;|&nbsp; ${metrics.length} metric(s)</div>`;
-    BOX_TYPES.forEach(cfg => {
-        html += `
-        <div class="chart-card">
-            <h3>${cfg.title}</h3>
-            <div class="chart-sub">Distribution of each metric across the selected iterations${'\u0020'}(box = quartiles, line = median).</div>
-            <div class="box-holder"><div id="${cfg.id}"></div></div>
-        </div>`;
-    });
-    // Curated performance metrics, derived in the same first / P50-P70-P90 manner
-    // as the Table (Specified) view.
+    // Order: Performance Metrics first, then Power Calculation, then Power Metrics.
+    // Curated performance metrics are derived in the same first / P50-P70-P90
+    // manner as the Table (Specified) view.
     const perfRows = (typeof curatedPerfMetricRows === 'function' && currentTable)
         ? curatedPerfMetricRows(currentTable).filter(r => r.Scenario === scenarios[0])
         : [];
@@ -51,13 +44,21 @@ function renderBoxplots(metrics) {
             <div class="chart-sub">Curated performance metrics, shown the same way as the Table (Specified) view${'\u0020'}(first value, or P50/P70/P90). Box = quartiles, line = median.</div>
             <div class="box-holder"><div id="boxPerf"></div></div>
         </div>`;
+    BOX_TYPES.forEach(cfg => {
+        html += `
+        <div class="chart-card">
+            <h3>${cfg.title}</h3>
+            <div class="chart-sub">Distribution of each metric across the selected iterations${'\u0020'}(box = quartiles, line = median).</div>
+            <div class="box-holder"><div id="${cfg.id}"></div></div>
+        </div>`;
+    });
     resultsDiv.innerHTML = html;
 
+    drawBoxChart('boxPerf', perfRows);
     BOX_TYPES.forEach(cfg => {
         const rows = metrics.filter(m => m.MetricType === cfg.type);
         drawBoxChart(cfg.id, rows);
     });
-    drawBoxChart('boxPerf', perfRows);
 }
 
 function drawBoxChart(elementId, rows) {

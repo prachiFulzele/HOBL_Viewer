@@ -150,6 +150,7 @@ function createMultiSelect(container, opts) {
 const deviceMS = createMultiSelect(document.getElementById('deviceMS'), { allLabel: 'All devices' });
 const ramMS = createMultiSelect(document.getElementById('ramMS'), { allLabel: 'All RAM configs', formatLabel: v => `${v} GB` });
 const scenarioMS = createMultiSelect(document.getElementById('scenarioMS'), { allLabel: 'All scenarios' });
+const hostMS = createMultiSelect(document.getElementById('hostMS'), { allLabel: 'All hosts' });
 
 // Close any open multi-select panel when clicking outside.
 document.addEventListener('click', () => { _allMultiSelects.forEach(ms => ms._close()); });
@@ -239,6 +240,7 @@ async function loadFilters() {
         deviceMS.setOptions(opts.devices || []);
         ramMS.setOptions(opts.rams || []);
         scenarioMS.setOptions(opts.scenarios || []);
+        hostMS.setOptions(opts.hostnames || []);
         // Constrain the date pickers to the available range and default to it.
         const dates = (opts.dates || []).slice().sort();  // ascending
         if (dates.length) {
@@ -264,6 +266,7 @@ async function applyFilters() {
     deviceMS.getSelected().forEach(v => params.append('device', v));
     ramMS.getSelected().forEach(v => params.append('ram', v));
     scenarioMS.getSelected().forEach(v => params.append('scenario', v));
+    hostMS.getSelected().forEach(v => params.append('host', v));
     // Date range and Last-N are mutually exclusive: Last-N takes precedence.
     if (useLastN) {
         params.set('last_n', lastN.value);
@@ -313,6 +316,7 @@ function resetFilters() {
     deviceMS.clear();
     ramMS.clear();
     scenarioMS.clear();
+    hostMS.clear();
     startDate.value = startDate.min || '';
     endDate.value = endDate.max || '';
     lastN.value = '';
@@ -329,9 +333,11 @@ function activeFilterSummary() {
     const dev = deviceMS.getSelected();
     const ram = ramMS.getSelected();
     const scn = scenarioMS.getSelected();
+    const host = hostMS.getSelected();
     parts.push(`Device: <strong>${dev.length ? escapeHtml(dev.join(', ')) : 'All'}</strong>`);
     parts.push(`RAM: <strong>${ram.length ? escapeHtml(ram.map(r => r + ' GB').join(', ')) : 'All'}</strong>`);
     parts.push(`Scenario: <strong>${scn.length ? escapeHtml(scn.join(', ')) : 'All'}</strong>`);
+    parts.push(`Host: <strong>${host.length ? escapeHtml(host.join(', ')) : 'All'}</strong>`);
     const useLastN = lastN.value && Number(lastN.value) > 0;
     if (useLastN) {
         parts.push(`Dates: <strong>All</strong>`);

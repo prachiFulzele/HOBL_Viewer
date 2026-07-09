@@ -194,6 +194,7 @@ def get_filter_options() -> dict:
         "devices": sorted({r["Device"] for r in records if r["Device"]}),
         "rams": sorted({r["Ram"] for r in records if r["Ram"]}, key=_ram_sort_key),
         "scenarios": sorted({r["Scenario"] for r in records if r["Scenario"]}),
+        "hostnames": sorted({r["HostName"] for r in records if r.get("HostName")}),
         "dates": sorted({r["RunDate"] for r in records if r["RunDate"]}, reverse=True),
     }
 
@@ -265,6 +266,7 @@ def get_metrics(
     device: str = "",
     ram: str = "",
     scenario: str = "",
+    host: str = "",
     start_date: str = "",
     end_date: str = "",
     last_n=None,
@@ -284,12 +286,14 @@ def get_metrics(
     dev_set = _as_set(device)
     ram_set = _as_set(ram)
     scn_set = _as_set(scenario)
+    host_set = _as_set(host)
     rows = [
         r
         for r in _load_records()
         if (not dev_set or r["Device"] in dev_set)
         and (not ram_set or r["Ram"] in ram_set)
         and (not scn_set or r["Scenario"] in scn_set)
+        and (not host_set or r.get("HostName") in host_set)
         and (not start_date or r["RunDate"] >= start_date)
         and (not end_date or r["RunDate"] <= end_date)
     ]
@@ -453,6 +457,7 @@ def get_table_data(
     device: str = "",
     ram: str = "",
     scenario: str = "",
+    host: str = "",
     start_date: str = "",
     end_date: str = "",
     last_n=None,
@@ -469,12 +474,14 @@ def get_table_data(
     dev_set = _as_set(device)
     ram_set = _as_set(ram)
     scn_set = _as_set(scenario)
+    host_set = _as_set(host)
     cols = [
         c
         for c in _load_columns()
         if (not dev_set or c["Device"] in dev_set)
         and (not ram_set or c["Ram"] in ram_set)
         and (not scn_set or c["Scenario"] in scn_set)
+        and (not host_set or c["Header"].get("Host Name") in host_set)
         and (not start_date or c["Date"] >= start_date)
         and (not end_date or c["Date"] <= end_date)
     ]

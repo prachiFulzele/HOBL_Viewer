@@ -26,6 +26,8 @@ const CURATED_PERF = [
     { label: 'Search Full Activation', kind: 'pct', pts: [9232] },
     { label: 'Explorer Input Delay', kind: 'first', pts: [6352] },
     { label: 'Teams FPS', kind: 'first', pts: [], name: 'teams_fps' },
+    { label: 'Teams Video Resolution Width', kind: 'first', pts: [], name: 'teams_video_resolution_width' },
+    { label: 'Teams Video Resolution Height', kind: 'first', pts: [], name: 'teams_video_resolution_height' },
 ];
 
 // DUT header rows split into device-constant attributes (merged into a single
@@ -201,24 +203,34 @@ function _covColor(v, min, med, max) {
     return _covMix(_COV_YELLOW, _COV_RED, (v - mid) / (max - mid));
 }
 
-// Color each CoV column (one per summary group) as a green->yellow->red scale,
-// normalized independently per column (like an Excel color scale on one column).
-// The bucket key is the group index, derived by counting `.stat-start` cells
-// (the P50 cell that opens each group, present in both numeric and N/A rows) —
-// NOT the position among `td.cov` cells. N/A summary cells carry no `cov` class,
-// so a positional index would shift whenever a group is N/A for that row,
-// collapsing CoV cells from different scenario columns into the same bucket.
+// Color the CoV cells as an Excel-style green->yellow->red 3-color scale,
+// normalized independently per (section, group) — i.e. each metric section
+// ("Power Metrics", "Performance Metrics", "Power Metrics (raw rails)") gets its
+// own scale within each summary column, so power CoVs are never pooled with the
+// generally larger perf CoVs.
+//
+// The bucket key is `sectionIdx:groupIdx`:
+//   - sectionIdx increments at each `tr.section-row` while walking rows in order.
+//   - groupIdx is derived by counting `.stat-start` cells (the P50 cell that
+//     opens each group, present in both numeric and N/A rows) — NOT the position
+//     among `td.cov` cells. N/A summary cells carry no `cov` class, so a
+//     positional index would shift whenever a group is N/A for that row,
+//     collapsing CoV cells from different scenario columns into the same bucket.
 function applyCovHeatmap(root) {
-    const cols = new Map();   // groupIdx -> [{ cell, v }]
-    root.querySelectorAll('table.xtable tr.metric-row').forEach(row => {
+    const cols = new Map();   // "sectionIdx:groupIdx" -> [{ cell, v }]
+    let section = 0;
+    root.querySelectorAll('table.xtable tr').forEach(row => {
+        if (row.classList.contains('section-row')) { section++; return; }
+        if (!row.classList.contains('metric-row')) return;
         let g = -1;
         row.querySelectorAll('td.stat').forEach(cell => {
             if (cell.classList.contains('stat-start')) g++;
             if (!cell.classList.contains('cov')) return;
             const v = parseFloat(cell.textContent);
             if (!Number.isFinite(v)) return;
-            if (!cols.has(g)) cols.set(g, []);
-            cols.get(g).push({ cell, v });
+            const key = section + ':' + g;
+            if (!cols.has(key)) cols.set(key, []);
+            cols.get(key).push({ cell, v });
         });
     });
     cols.forEach(bucket => {
