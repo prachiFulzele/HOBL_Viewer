@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HOBL Dashboard — AI Analysis</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/H.png') }}">
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+    <style>
+        :root {
+            --primary: #0a66c2;
+            --primary-2: #2b88d8;
+            --primary-dark: #084c93;
+            --bg: #eef1f6;
+            --card-bg: #ffffff;
+            --border: #e4e8f0;
+            --border-strong: #d4dae6;
+            --text: #1f2733;
+            --text-secondary: #66707d;
+            --accent-soft: #eef5fd;
+            --shadow-sm: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+            --shadow-md: 0 4px 12px rgba(16,24,40,.08), 0 2px 4px rgba(16,24,40,.06);
+            --radius: 12px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background:
+                radial-gradient(1200px 400px at 100% -10%, #e7eefb 0%, transparent 60%),
+                var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ── Header ────────────────────────────────────────── */
+        header {
+            background: linear-gradient(120deg, var(--primary-dark), var(--primary) 55%, var(--primary-2));
+            color: white;
+            padding: 12px 22px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 2px 10px rgba(8,76,147,.25);
+            flex-shrink: 0;
+        }
+        .brand-ico {
+            width: 38px; height: 38px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .brand-text { display: flex; flex-direction: column; line-height: 1.2; flex: 1; }
+        .brand-text h1 { font-size: 18px; font-weight: 600; }
+        .brand-text .sub { font-size: 12px; opacity: 0.82; font-weight: 400; }
+        header a.back {
+            color: white; text-decoration: none; font-size: 13.5px; font-weight: 600;
+            border: 1px solid rgba(255,255,255,0.5); padding: 8px 14px; border-radius: 8px;
+            transition: background 0.15s;
+        }
+        header a.back:hover { background: rgba(255,255,255,0.16); }
+
+        /* ── Workspace layout ─────────────────────────────── */
+        .workspace {
+            flex: 1; min-height: 0;
+            display: flex; flex-direction: column; gap: 14px;
+            padding: 16px 18px 18px;
+        }
+
+        /* Query bar (the "chatbox") */
+        .querybar {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            display: flex; flex-direction: column; gap: 12px;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-sm);
+        }
+        .qrow { display: flex; gap: 12px; align-items: stretch; }
+        .qfield {
+            flex: 1; position: relative; display: flex; align-items: center;
+        }
+        .qfield .qico {
+            position: absolute; left: 14px; top: 14px; color: var(--text-secondary);
+            pointer-events: none;
+        }
+        .qrow textarea {
+            flex: 1; resize: none; min-height: 48px; max-height: 130px;
+            padding: 13px 14px 13px 42px;
+            border: 1px solid var(--border-strong); border-radius: 10px;
+            font-size: 14.5px; font-family: inherit; background: #fbfcfe; color: var(--text);
+            transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+        }
+        .qrow textarea::placeholder { color: #9aa3b2; }
+        .qrow textarea:focus {
+            outline: none; border-color: var(--primary); background: #fff;
+            box-shadow: 0 0 0 3px rgba(10,102,194,0.15);
+        }
+        .qrow button {
+            padding: 0 22px; border: none; border-radius: 10px;
+            background: linear-gradient(120deg, var(--primary), var(--primary-2));
+            color: white; font-size: 14px; font-weight: 600; cursor: pointer;
+            display: inline-flex; align-items: center; gap: 8px;
+            box-shadow: 0 2px 6px rgba(10,102,194,.3); transition: filter 0.15s, transform 0.05s;
+        }
+        .qrow button:hover { filter: brightness(1.06); }
+        .qrow button:active { transform: translateY(1px); }
+        .qrow button:disabled { opacity: 0.55; cursor: not-allowed; filter: none; }
+
+        .examples { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .examples .ex-label {
+            font-size: 11.5px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.5px; color: var(--text-secondary); margin-right: 2px;
+        }
+        .example-chip {
+            background: var(--accent-soft); border: 1px solid #d6e4f7; border-radius: 18px;
+            padding: 6px 13px; font-size: 12.5px; color: var(--primary); cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .example-chip:hover { background: #e1eefb; border-color: #bcd6f5; }
+
+        /* Results: left table | splitter | right column */
+        .results {
+            flex: 1; min-height: 0; display: grid;
+            grid-template-columns: var(--leftw, 58%) 10px minmax(0, 1fr);
+        }
+        .right-col {
+            min-height: 0; display: grid;
+            grid-template-rows: var(--toph, 42%) 10px minmax(0, 1fr);
+        }
+
+        .panel {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+        .phead {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            background: linear-gradient(180deg, #fbfcfe, #f4f7fb);
+            display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+        }
+        .phead-ico {
+            width: 26px; height: 26px; border-radius: 7px; flex-shrink: 0;
+            background: var(--accent-soft); color: var(--primary);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .phead-title {
+            font-size: 12px; font-weight: 700; color: var(--text);
+            text-transform: uppercase; letter-spacing: 0.6px;
+        }
+        .phead-sub { font-size: 12px; font-weight: 400; color: var(--text-secondary); margin-left: 2px; }
+        .pbody { padding: 14px 16px; overflow: auto; flex: 1; min-height: 0; }
+
+        /* Splitters */
+        .vsplit, .hsplit { position: relative; }
+        .vsplit { cursor: col-resize; }
+        .hsplit { cursor: row-resize; }
+        .vsplit::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px; height: 46px; border-radius: 4px; background: var(--border-strong);
+            transition: background 0.15s;
+        }
+        .hsplit::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            height: 4px; width: 46px; border-radius: 4px; background: var(--border-strong);
+            transition: background 0.15s;
+        }
+        .vsplit:hover::after, .hsplit:hover::after { background: var(--primary); }
+        body.dragging { user-select: none; cursor: inherit; }
+
+        /* Placeholders / states */
+        .placeholder, .graph-empty {
+            height: 100%; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 10px;
+            text-align: center; color: var(--text-secondary); font-size: 13.5px; padding: 20px;
+        }
+        .placeholder svg, .graph-empty svg { opacity: 0.5; }
+        .graph-empty {
+            border: 1.5px dashed var(--border-strong); border-radius: 10px; margin: 4px;
+            background: #fbfcfe;
+        }
+        .err { color: #d13438; font-weight: 500; }
+
+        /* Chart */
+        .chart-wrap { display: flex; flex-direction: column; height: 100%; gap: 8px; }
+        .chart-area { flex: 1; min-height: 160px; }
+        .chart-reason {
+            font-size: 12px; color: var(--text-secondary);
+            border-top: 1px solid var(--border); padding-top: 8px; font-style: italic;
+        }
+
+        .result-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; color: var(--text); }
+        .explanation { color: var(--text-secondary); font-size: 13.5px; margin-bottom: 12px; line-height: 1.5; }
+        .insight {
+            background: linear-gradient(180deg, #f4f9ff, #eef5fd);
+            border: 1px solid #d9e8fa; border-left: 4px solid var(--primary);
+            padding: 14px 16px; border-radius: 10px; font-size: 13.5px; line-height: 1.55;
+        }
+        .insight .headline { font-weight: 700; color: var(--text); margin-bottom: 8px; font-size: 14px; }
+        .insight ul.points { margin: 6px 0 0; padding-left: 18px; }
+        .insight ul.points li { margin: 4px 0; }
+        .insight .conclusion {
+            margin-top: 12px; padding-top: 10px; border-top: 1px solid #cfe0f5;
+            font-weight: 600; color: var(--primary-dark);
+        }
+        .meta { font-size: 12px; color: var(--text-secondary); margin-top: 12px; }
+
+        /* Table */
+        table.ai-table { border-collapse: collapse; font-size: 13px; width: 100%; }
+        table.ai-table th, table.ai-table td {
+            border: 1px solid var(--border); padding: 8px 12px;
+            text-align: right; white-space: nowrap;
+        }
+        table.ai-table th {
+            position: sticky; top: 0; z-index: 1;
+            background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+            color: white; font-weight: 600; border-color: var(--primary-dark);
+        }
+        table.ai-table th:first-child, table.ai-table td:first-child {
+            text-align: left; font-weight: 600;
+        }
+        table.ai-table tbody tr:nth-child(even) td { background: #f7f9fc; }
+        table.ai-table tbody tr:hover td { background: var(--accent-soft); }
+
+        details.kql { margin-top: 16px; }
+        details.kql summary {
+            cursor: pointer; font-size: 13px; font-weight: 600; color: var(--primary);
+            user-select: none;
+        }
+        details.kql pre {
+            background: #1e1e1e; color: #d4d4d4; padding: 12px 14px; border-radius: 8px;
+            font-family: 'Consolas', 'Courier New', monospace; font-size: 12.5px;
+            overflow-x: auto; margin-top: 8px; white-space: pre-wrap;
+        }
+
+        .spinner {
+            display: inline-block; width: 22px; height: 22px;
+            border: 3px solid #dde3ec; border-top-color: var(--primary);
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* AI reasoning strip */
+        .thinking {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--primary);
+            border-radius: var(--radius);
+            padding: 10px 14px 12px;
+            flex-shrink: 0;
+            box-shadow: var(--shadow-sm);
+        }
+        .thinking-head { display: flex; align-items: center; gap: 9px; }
+        .thinking-ico {
+            width: 24px; height: 24px; border-radius: 6px; flex-shrink: 0;
+            background: var(--accent-soft); color: var(--primary);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .thinking-title {
+            font-size: 12px; font-weight: 700; color: var(--text);
+            text-transform: uppercase; letter-spacing: 0.6px; flex: 1;
+        }
+        .thinking-toggle {
+            background: none; border: none; cursor: pointer; font-size: 13px;
+            color: var(--text-secondary); padding: 2px 6px; border-radius: 4px;
+        }
+        .thinking-toggle:hover { background: #eef1f6; }
+        .thinking-steps { list-style: none; margin: 8px 0 0; padding: 0; }
+        .thinking.collapsed .thinking-steps { display: none; }
+        .thinking.collapsed .thinking-toggle { transform: rotate(-90deg); }
+        .t-step {
+            display: flex; align-items: flex-start; gap: 9px;
+            font-size: 13px; color: var(--text-secondary); padding: 3px 0; line-height: 1.45;
+        }
+        .t-step .t-mark {
+            flex-shrink: 0; width: 16px; height: 16px; margin-top: 1px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .t-step.active { color: var(--text); font-weight: 500; }
+        .t-step.done .t-mark { color: #2e9e5b; }
+        .t-step.pending { opacity: 0.5; }
+        .t-step .t-key { color: var(--primary-dark); font-weight: 600; }
+        .t-dot {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong);
+        }
+        .t-step.active .t-dot { background: var(--primary); animation: pulse 1s ease-in-out infinite; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .t-spin {
+            width: 13px; height: 13px; border: 2px solid #dde3ec;
+            border-top-color: var(--primary); border-radius: 50%; animation: spin 0.7s linear infinite;
+        }
+        .t-check svg { width: 13px; height: 13px; }
+
+        /* ── Stacked views (table panel) ──────────────────── */
+        .view-block { margin-bottom: 14px; }
+        .view-block:last-child { margin-bottom: 0; }
+        .view-head {
+            width: 100%; text-align: left; cursor: pointer;
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+            background: #f7f9fc; border: 1px solid var(--border);
+            border-radius: 8px; padding: 9px 12px; margin-bottom: 8px;
+            transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+        }
+        .view-head:hover { background: #eef3fb; }
+        .view-block.active .view-head {
+            background: var(--accent-soft); border-color: #bcd6f5;
+            box-shadow: inset 3px 0 0 var(--primary);
+        }
+        .view-chip {
+            font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+            color: var(--primary-dark); background: #e1eefb; border: 1px solid #cfe0f5;
+            border-radius: 10px; padding: 2px 8px; flex-shrink: 0;
+        }
+        .view-chip.base { color: #555f6e; background: #eef1f6; border-color: var(--border); }
+        .view-title { font-size: 14px; font-weight: 600; color: var(--text); }
+        .view-q { font-size: 12px; color: var(--text-secondary); font-style: italic; }
+        .view-block:not(.active) { opacity: 0.92; }
+        .view-loading, .view-error {
+            display: flex; align-items: center; gap: 8px; padding: 10px 4px;
+            font-size: 13px; color: var(--text-secondary);
+        }
+        .view-error { color: #d13438; }
+
+        /* Source label shown on Summary/Graph when several views exist */
+        .view-source {
+            font-size: 12px; color: var(--text-secondary);
+            margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px dashed var(--border);
+        }
+        .view-source strong { color: var(--primary-dark); }
+
+        /* ── Refine footer (inner chatbox) ────────────────── */
+        .panel-foot {
+            flex-shrink: 0; border-top: 1px solid var(--border);
+            background: #fbfcfe; padding: 10px 14px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .panel-foot[hidden] { display: none; }
+        .refine-row { display: flex; gap: 8px; flex: 1; }
+        .refine-row input {
+            flex: 1; padding: 9px 12px; border: 1px solid var(--border-strong);
+            border-radius: 8px; font-size: 13.5px; font-family: inherit; background: #fff;
+        }
+        .refine-row input:focus {
+            outline: none; border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(10,102,194,0.13);
+        }
+        .refine-btn {
+            padding: 0 18px; border: none; border-radius: 8px; cursor: pointer;
+            background: var(--primary); color: #fff; font-size: 13.5px; font-weight: 600;
+        }
+        .refine-btn:hover { filter: brightness(1.06); }
+        .refine-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+        .reset-btn {
+            background: none; border: 1px solid var(--border-strong); color: var(--text-secondary);
+            border-radius: 8px; padding: 8px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+        }
+        .reset-btn:hover { background: #eef1f6; color: var(--text); }
+
+        /* ── Clarification card ───────────────────────────── */
+        .clarify {
+            background: #fff9ec; border: 1px solid #f3e2b3; border-left: 4px solid #e8a33d;
+            border-radius: var(--radius); padding: 14px 16px; flex-shrink: 0;
+            box-shadow: var(--shadow-sm);
+        }
+        .clarify[hidden] { display: none; }
+        .clarify-head { display: flex; align-items: center; gap: 10px; }
+        .clarify-ico {
+            width: 24px; height: 24px; border-radius: 50%; flex-shrink: 0;
+            background: #e8a33d; color: #fff; font-weight: 700; font-size: 15px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .clarify-q { font-size: 14px; font-weight: 600; color: #6a4a12; }
+        .clarify-opts { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 10px 34px; }
+        .clarify-opt {
+            background: #fff; border: 1px solid #e6cd8f; border-radius: 18px;
+            padding: 7px 14px; font-size: 13px; color: #8a5a14; cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .clarify-opt:hover { background: #fdf3da; border-color: #e8a33d; }
+        .clarify-reply { display: flex; gap: 8px; margin-left: 34px; }
+        .clarify-reply input {
+            flex: 1; padding: 8px 12px; border: 1px solid #e6cd8f; border-radius: 8px;
+            font-size: 13px; font-family: inherit; background: #fff;
+        }
+        .clarify-reply input:focus {
+            outline: none; border-color: #e8a33d; box-shadow: 0 0 0 3px rgba(232,163,61,0.18);
+        }
+        .clarify-send {
+            padding: 0 16px; border: none; border-radius: 8px; cursor: pointer;
+            background: #e8a33d; color: #fff; font-size: 13px; font-weight: 600;
+        }
+        .clarify-send:hover { filter: brightness(1.05); }
+
+        /* Stack on narrow screens */
+        @media (max-width: 880px) {
+            body { overflow: auto; height: auto; min-height: 100vh; }
+            .results { display: flex; flex-direction: column; gap: 14px; }
+            .right-col { display: flex; flex-direction: column; gap: 14px; }
+            .vsplit, .hsplit { display: none; }
+            .panel { min-height: 260px; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <span class="brand-ico">
+        <img src="{{ url_for('static', filename='img/H.png') }}" alt="HOBL logo" width="30" height="30" style="display:block;border-radius:50%;">
+    </span>
+    <div class="brand-text">
+        <h1>AI Analysis</h1>
+        <span class="sub">Ask anything about your power &amp; performance data</span>
+    </div>
+    <a class="back" href="/">← Back to Dashboard</a>
+</header>
+
+<div class="workspace">
+    <!-- Query bar -->
+    <div class="querybar">
+        <div class="qrow">
+            <div class="qfield">
+                <span class="qico">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </span>
+                <textarea id="input" rows="1" placeholder="Ask in plain English — e.g. Compare mean, P50 and P90 of system power across devices with their P90/P50 ratio"></textarea>
+            </div>
+            <button id="sendBtn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2l2.4 6.9L21 11l-6.6 2.1L12 20l-2.4-6.9L3 11l6.6-2.1z"/></svg>
+                Analyze
+            </button>
+        </div>
+        <div class="examples" id="examples">
+            <span class="ex-label">Try</span>
+            <span class="example-chip">Compare system power between all devices</span>
+            <span class="example-chip">Mean, P50 and P90 of system power per device</span>
+            <span class="example-chip">Top 3 devices by average battery life</span>
+            <span class="example-chip">Compare P90 of Edge page load across devices</span>
+        </div>
+    </div>
+
+    <!-- AI reasoning strip -->
+    <div class="thinking" id="thinking" hidden>
+        <div class="thinking-head">
+            <span class="thinking-ico" id="thinkingIco">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a7 7 0 0 0-4 12.74V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.26A7 7 0 0 0 12 2zM9 21a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-1H9v1z"/></svg>
+            </span>
+            <span class="thinking-title" id="thinkingTitle">AI reasoning</span>
+            <button class="thinking-toggle" id="thinkingToggle" type="button" aria-label="Toggle">▾</button>
+        </div>
+        <ul class="thinking-steps" id="thinkingSteps"></ul>
+    </div>
+
+    <!-- Clarification card (shown when a request is ambiguous) -->
+    <div class="clarify" id="clarify" hidden></div>
+
+    <!-- Results: table | splitter | (summary / graph) -->
+    <div class="results" id="results">
+        <section class="panel" id="tablePanel">
+            <div class="phead">
+                <span class="phead-ico">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h18v4H3V3zm0 6h8v12H3V9zm10 0h8v5h-8V9zm0 7h8v5h-8v-5z"/></svg>
+                </span>
+                <span class="phead-title">View created by query</span>
+                <span class="phead-sub" id="tableSub"></span>
+            </div>
+            <div class="pbody" id="tableBody">
+                <div class="placeholder">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 3h18v18H3z"/><path d="M3 9h18M9 9v12"/></svg>
+                    Ask a question above — the result table will appear here.
+                </div>
+            </div>
+            <div class="panel-foot" id="refineFoot" hidden>
+                <div class="refine-row">
+                    <input id="refineInput" type="text" autocomplete="off"
+                           placeholder="Refine this view — e.g. only 16GB, or break it down by RAM">
+                    <button id="refineBtn" class="refine-btn" type="button">Refine</button>
+                </div>
+                <button id="resetViewsBtn" class="reset-btn" type="button" hidden>Clear follow-ups</button>
+            </div>
+        </section>
+
+        <div class="vsplit" id="vsplit" title="Drag to resize"></div>
+
+        <div class="right-col" id="rightCol">
+            <section class="panel" id="summaryPanel">
+                <div class="phead">
+                    <span class="phead-ico">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h16v2H4V5zm0 6h16v2H4v-2zm0 6h10v2H4v-2z"/></svg>
+                    </span>
+                    <span class="phead-title">Summary</span>
+                </div>
+                <div class="pbody" id="summaryBody">
+                    <div class="placeholder">
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5h16M4 10h16M4 15h10"/></svg>
+                        A short summary of the result will appear here.
+                    </div>
+                </div>
+            </section>
+
+            <div class="hsplit" id="hsplit" title="Drag to resize"></div>
+
+            <section class="panel" id="graphPanel">
+                <div class="phead">
+                    <span class="phead-ico">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M4 4h2v16H4V4zm14 7h2v9h-2v-9zM9 9h2v11H9V9zm5-4h2v15h-2V5z"/></svg>
+                    </span>
+                    <span class="phead-title">Graph</span>
+                    <span class="phead-sub" id="graphSub">auto-selected for your result</span>
+                </div>
+                <div class="pbody" id="graphBody">
+                    <div class="graph-empty">
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 19V5M4 19h16M8 16l3-4 3 2 4-6"/></svg>
+                        A chart of your result will appear here.
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+</div>
+
+<script>
+const input = document.getElementById('input');
+const sendBtn = document.getElementById('sendBtn');
+const tableBody = document.getElementById('tableBody');
+const tableSub = document.getElementById('tableSub');
+const summaryBody = document.getElementById('summaryBody');
+const graphBody = document.getElementById('graphBody');
+const graphSub = document.getElementById('graphSub');
+const refineFoot = document.getElementById('refineFoot');
+const refineInput = document.getElementById('refineInput');
+const refineBtn = document.getElementById('refineBtn');
+const resetViewsBtn = document.getElementById('resetViewsBtn');
+const clarifyEl = document.getElementById('clarify');
+
+// Holds the question/refine flag while we wait for the user to answer a
+// clarifying question. Null when no clarification is pending.
+let pendingClarify = null;
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+function fmtCell(v) {
+    if (v === null || v === undefined || v === '') return '—';
+    if (typeof v === 'number') {
+        return Number.isInteger(v) ? String(v)
+            : (Math.abs(v) >= 100 ? v.toFixed(1) : v.toFixed(3));
+    }
+    return escapeHtml(String(v));
+}
+
+function renderTable(columns, rows) {
+    if (!columns || !columns.length || !rows || !rows.length) {
+        return '<div class="placeholder">No rows matched this query.</div>';
+    }
+    const head = '<tr>' + columns.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr>';
+    const body = rows.map(r =>
+        '<tr>' + r.map(c => `<td>${fmtCell(c)}</td>`).join('') + '</tr>'
+    ).join('');
+    return `<table class="ai-table"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+}
+
+/*
+ * View store
+ * ----------
+ * The table panel holds a stack of "views". The first (base) view comes from the
+ * main question; each refinement appends another view below it. Summary + Graph
+ * always reflect the ACTIVE view — the newest by default, or whichever view's
+ * title the user clicks. Each view caches its full server response, so switching
+ * the active view is instant and never re-queries.
+ */
+const ViewStore = {
+    views: [],
+    activeId: null,
+    _seq: 0,
+    reset() { this.views = []; this.activeId = null; },
+    add(question, data, kind) {
+        const view = { id: ++this._seq, question, data, kind };
+        this.views.push(view);
+        this.activeId = view.id;
+        return view;
+    },
+    clearRefinements() {
+        this.views = this.views.slice(0, 1);
+        this.activeId = this.views.length ? this.views[0].id : null;
+    },
+    setActive(id) { if (this.views.some(v => v.id === id)) this.activeId = id; },
+    active() { return this.views.find(v => v.id === this.activeId) || null; },
+    get length() { return this.views.length; },
+};
+
+function viewBlockHtml(view, isActive) {
+    const d = view.data;
+    const chip = view.kind === 'refine'
+        ? '<span class="view-chip">refined</span>'
+        : '<span class="view-chip base">base</span>';
+    const kql = d.kql
+        ? `<details class="kql"><summary>Show generated query</summary><pre>${escapeHtml(d.kql)}</pre></details>`
+        : '';
+    return `
+        <article class="view-block${isActive ? ' active' : ''}" data-view-id="${view.id}">
+            <button class="view-head" type="button" data-view-id="${view.id}"
+                    title="Show this view's summary & graph">
+                ${chip}
+                <span class="view-title">${escapeHtml(d.title || 'Result')}</span>
+                <span class="view-q">${escapeHtml(view.question || '')}</span>
+            </button>
+            ${renderTable(d.columns, d.rows)}
+            ${kql}
+        </article>`;
+}
+
+/** Render the full stack of view blocks into the table panel. */
+function renderViews() {
+    if (!ViewStore.length) {
+        tableBody.innerHTML = '<div class="placeholder">Ask a question above — the result table will appear here.</div>';
+        refineFoot.hidden = true;
+        return;
+    }
+    tableBody.innerHTML = ViewStore.views
+        .map(v => viewBlockHtml(v, v.id === ViewStore.activeId))
+        .join('');
+    refineFoot.hidden = false;
+    resetViewsBtn.hidden = ViewStore.length < 2;
+    const activeEl = tableBody.querySelector('.view-block.active');
+    if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+/** Render Summary + Graph for the active view (with a source label if stacked). */
+function renderActiveSide() {
+    const view = ViewStore.active();
+    if (!view) return;
+    const stacked = ViewStore.length > 1;
+    const title = escapeHtml(view.data.title || 'Result');
+    const label = stacked ? `<div class="view-source">Showing: <strong>${title}</strong></div>` : '';
+    summaryBody.innerHTML = label + renderSummaryPanel(view.data);
+    graphSub.textContent = stacked ? title : 'auto-selected for your result';
+    renderGraphPanel(view.data);
+}
+
+/** Switch the active view when a view title is clicked (instant, no re-query). */
+function onViewHeadClick(event) {
+    const head = event.target.closest('.view-head');
+    if (!head) return;
+    const id = Number(head.dataset.viewId);
+    if (!id || id === ViewStore.activeId) return;
+    ViewStore.setActive(id);
+    tableBody.querySelectorAll('.view-block').forEach(block =>
+        block.classList.toggle('active', Number(block.dataset.viewId) === id));
+    renderActiveSide();
+}
+
+function renderSummaryPanel(data) {
+    let html = '';
+    if (data.explanation) html += `<div class="explanation">${escapeHtml(data.explanation)}</div>`;
+    const s = data.summary;
+    if (s && (s.headline || (s.points && s.points.length))) {
+        html += '<div class="insight">';
+        if (s.headline) html += `<div class="headline">${escapeHtml(s.headline)}</div>`;
+        if (s.points && s.points.length) {
+            html += '<ul class="points">' +
+                s.points.map(p => `<li>${escapeHtml(p)}</li>`).join('') + '</ul>';
+        }
+        if (s.conclusion) html += `<div class="conclusion">${escapeHtml(s.conclusion)}</div>`;
+        html += '</div>';
+    } else if (data.insight) {
+        html += `<div class="insight">${escapeHtml(data.insight)}</div>`;
+    } else {
+        html += '<div class="placeholder">No summary available for this query.</div>';
+    }
+    if (typeof data.matched_rows === 'number') {
+        html += `<div class="meta">${data.matched_rows} row(s) analyzed.</div>`;
+    }
+    return html;
+}
+
+const CHART_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#17becf'];
+
+function prettyLabel(s) {
+    return String(s).replace(/_/g, ' ');
+}
+
+function renderGraphPanel(data) {
+    const c = data.chart;
+    if (!c || c.type === 'none' || !c.y_indices || !c.y_indices.length) {
+        graphBody.innerHTML = `<div class="graph-empty">${escapeHtml((c && c.reason) || 'No chart for this result.')}</div>`;
+        return;
+    }
+
+    graphBody.innerHTML =
+        '<div class="chart-wrap"><div class="chart-area" id="chartArea"></div>' +
+        `<div class="chart-reason">${escapeHtml(c.reason || '')}</div></div>`;
+
+    const cols = data.columns, rows = data.rows;
+    const xi = c.x_index;
+    const si = c.series_index;
+    const horizontal = c.orientation === 'h';
+
+    // Stable color per category value (e.g. each Device keeps one color).
+    const colorMap = {};
+    function colorFor(key) {
+        if (!(key in colorMap)) colorMap[key] = CHART_COLORS[Object.keys(colorMap).length % CHART_COLORS.length];
+        return colorMap[key];
+    }
+
+    let traces = [];
+    let xTitle = '', yTitle = '';
+
+    if (c.type === 'line') {
+        xTitle = prettyLabel(cols[xi]);
+        yTitle = prettyLabel(cols[c.y_indices[0]]);
+        const seriesKeys = si != null ? [...new Set(rows.map(r => String(r[si])))] : null;
+        if (seriesKeys) {
+            // One colored line per device.
+            const yi = c.y_indices[0];
+            traces = seriesKeys.map(key => {
+                const sub = rows.filter(r => String(r[si]) === key)
+                    .slice().sort((a, b) => (Number(a[xi]) - Number(b[xi])) || String(a[xi]).localeCompare(String(b[xi])));
+                return {
+                    type: 'scatter', mode: 'lines+markers', name: key,
+                    x: sub.map(r => r[xi]), y: sub.map(r => (typeof r[yi] === 'number' ? r[yi] : null)),
+                    line: { color: colorFor(key), width: 2 }, marker: { color: colorFor(key), size: 6 },
+                };
+            });
+        } else {
+            const idx = rows.map((_, i) => i).sort((a, b) => (Number(rows[a][xi]) - Number(rows[b][xi])) || String(rows[a][xi]).localeCompare(String(rows[b][xi])));
+            const xs = idx.map(i => rows[i][xi]);
+            traces = c.y_indices.map((yi, k) => ({
+                type: 'scatter', mode: 'lines+markers', name: prettyLabel(cols[yi]),
+                x: xs, y: idx.map(i => (typeof rows[i][yi] === 'number' ? rows[i][yi] : null)),
+                line: { color: CHART_COLORS[k % CHART_COLORS.length], width: 2 },
+                marker: { color: CHART_COLORS[k % CHART_COLORS.length], size: 6 },
+            }));
+        }
+    } else if (c.type === 'box') {
+        xTitle = prettyLabel(cols[xi]);
+        yTitle = prettyLabel(cols[c.y_indices[0]]);
+        const yi = c.y_indices[0];
+        const groups = {};
+        rows.forEach(r => {
+            const key = String(r[xi]);
+            if (typeof r[yi] === 'number') (groups[key] = groups[key] || []).push(r[yi]);
+        });
+        traces = Object.keys(groups).map(key => ({
+            type: 'box', name: key, y: groups[key], boxpoints: 'all', jitter: 0.4, pointpos: 0,
+            marker: { color: colorFor(key), size: 4 }, line: { color: colorFor(key) },
+            fillcolor: colorFor(key) + '33',
+        }));
+    } else {
+        // bar / grouped_bar
+        xTitle = prettyLabel(cols[xi]);
+        const cats = rows.map(r => String(r[xi]));
+        if (c.y_indices.length === 1) {
+            // Single metric → color each device differently, one per legend entry.
+            const yi = c.y_indices[0];
+            yTitle = prettyLabel(cols[yi]);
+            traces = rows.map(r => {
+                const key = String(r[xi]);
+                const v = (typeof r[yi] === 'number' ? r[yi] : null);
+                const t = { type: 'bar', name: key, marker: { color: colorFor(key) }, showlegend: true };
+                if (horizontal) { t.orientation = 'h'; t.x = [v]; t.y = [key]; }
+                else { t.x = [key]; t.y = [v]; }
+                return t;
+            });
+        } else {
+            // Multiple metrics → one colored series per metric, devices on the axis.
+            yTitle = 'Value';
+            traces = c.y_indices.map((yi, k) => {
+                const vals = rows.map(r => (typeof r[yi] === 'number' ? r[yi] : null));
+                const base = { type: 'bar', name: prettyLabel(cols[yi]), marker: { color: CHART_COLORS[k % CHART_COLORS.length] } };
+                if (horizontal) { base.orientation = 'h'; base.x = vals; base.y = cats; }
+                else { base.x = cats; base.y = vals; }
+                return base;
+            });
+        }
+    }
+
+    const axisX = { title: { text: horizontal ? yTitle : xTitle }, automargin: true, gridcolor: '#eee' };
+    const axisY = { title: { text: horizontal ? xTitle : yTitle }, automargin: true, gridcolor: '#eee' };
+
+    const layout = {
+        margin: { l: 60, r: 16, t: 10, b: 50 },
+        barmode: 'group',
+        showlegend: traces.length > 1,
+        legend: { orientation: 'h', y: 1.14, x: 0 },
+        font: { family: 'Segoe UI, Tahoma, sans-serif', size: 11 },
+        paper_bgcolor: 'white', plot_bgcolor: 'white',
+        xaxis: axisX,
+        yaxis: axisY,
+    };
+
+    Plotly.newPlot('chartArea', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+/*
+ * Run an analysis request.
+ *   - Base request (refine = false): replaces the whole view stack.
+ *   - Refinement (refine = true): sends the active view's spec as context so the
+ *     model adjusts it, then appends the result as a new view below.
+ *   - clarification: the user's answer to a previous clarifying question; tells
+ *     the server to answer rather than ask again.
+ * The server may respond with a clarification request instead of a result, in
+ * which case we show the question and wait for the user's answer.
+ */
+async function runAnalysis(question, { refine = false, clarification = null } = {}) {
+    question = (question || '').trim();
+    if (!question) return;
+
+    hideClarify();
+    sendBtn.disabled = true;
+    refineBtn.disabled = true;
+    startThinking();
+
+    if (refine) {
+        tableBody.insertAdjacentHTML('beforeend',
+            '<div class="view-loading" id="viewLoading"><span class="spinner"></span> Refining this view…</div>');
+        const loadingEl = document.getElementById('viewLoading');
+        if (loadingEl) loadingEl.scrollIntoView({ block: 'nearest' });
+    } else {
+        tableSub.textContent = `“${question}”`;
+        tableBody.innerHTML = '<div class="placeholder"><span class="spinner"></span>Analyzing… (a browser sign-in may appear on first use)</div>';
+    }
+    summaryBody.innerHTML = '<div class="placeholder"><span class="spinner"></span>Working…</div>';
+    graphBody.innerHTML = '<div class="graph-empty"><span class="spinner"></span></div>';
+
+    const body = { question };
+    if (clarification) body.clarification = clarification;
+    if (refine) {
+        const base = ViewStore.active();
+        if (base && base.data && base.data.spec) {
+            // Send the active view's plan AND the result on screen, so the model
+            // drills down on what the user is actually looking at.
+            body.context = {
+                spec: base.data.spec,
+                question: base.question,
+                result: {
+                    title: base.data.title,
+                    columns: base.data.columns,
+                    rows: (base.data.rows || []).slice(0, 8),
+                },
+            };
+        }
+    }
+
+    try {
+        const resp = await fetch('/api/ai/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await resp.json();
+        if (!resp.ok || data.error) {
+            handleAnalysisError(data.error || ('Request failed: ' + resp.status), refine);
+            return;
+        }
+        if (data.clarify && data.clarify.question) {
+            showClarify(data.clarify, { question, refine });
+            return;
+        }
+        if (!refine) ViewStore.reset();
+        ViewStore.add(question, data, refine ? 'refine' : 'base');
+        renderViews();
+        renderActiveSide();
+        finishThinking(data, refine);
+    } catch (e) {
+        handleAnalysisError(e.message, refine);
+    } finally {
+        sendBtn.disabled = false;
+        refineBtn.disabled = false;
+        if (!pendingClarify) (refine ? refineInput : input).focus();
+    }
+}
+
+/** Show an analysis error without destroying an existing stack on refinement. */
+function handleAnalysisError(message, refine) {
+    failThinking(message);
+    const loadingEl = document.getElementById('viewLoading');
+    if (loadingEl) loadingEl.remove();
+    if (refine && ViewStore.length) {
+        tableBody.insertAdjacentHTML('beforeend',
+            `<div class="view-error">${escapeHtml(message)}</div>`);
+    } else {
+        tableBody.innerHTML = `<div class="err">${escapeHtml(message)}</div>`;
+        summaryBody.innerHTML = '<div class="placeholder">—</div>';
+        graphBody.innerHTML = '<div class="graph-empty">—</div>';
+    }
+}
+
+// ── Clarification flow ────────────────────────────────────────────
+function showClarify(clarify, pending) {
+    pendingClarify = { ...pending, question: pending.question };
+    restoreIdleState();
+
+    const options = (clarify.options || [])
+        .map(o => `<button class="clarify-opt" type="button">${escapeHtml(o)}</button>`)
+        .join('');
+    clarifyEl.innerHTML = `
+        <div class="clarify-head">
+            <span class="clarify-ico">?</span>
+            <span class="clarify-q">${escapeHtml(clarify.question)}</span>
+        </div>
+        ${options ? `<div class="clarify-opts">${options}</div>` : ''}
+        <div class="clarify-reply">
+            <input id="clarifyInput" type="text" autocomplete="off" placeholder="Or type your answer…">
+            <button id="clarifySend" class="clarify-send" type="button">Send</button>
+        </div>`;
+    clarifyEl.hidden = false;
+
+    // Reflect the waiting state in the reasoning strip.
+    clearInterval(thinkTimer);
+    thinkingEl.hidden = false;
+    thinkingEl.classList.remove('collapsed');
+    thinkingTitle.textContent = 'Waiting for your clarification';
+    thinkingSteps.innerHTML = thinkRow('active', 'The request was ambiguous — pick an option or type an answer below.');
+
+    const replyInput = document.getElementById('clarifyInput');
+    clarifyEl.querySelectorAll('.clarify-opt').forEach(btn =>
+        btn.addEventListener('click', () => resolveClarify(btn.textContent)));
+    document.getElementById('clarifySend').addEventListener('click', () => resolveClarify(replyInput.value));
+    replyInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); resolveClarify(replyInput.value); }
+    });
+    replyInput.focus();
+}
+
+function resolveClarify(answer) {
+    answer = (answer || '').trim();
+    if (!answer || !pendingClarify) return;
+    const { question, refine } = pendingClarify;
+    hideClarify();
+    runAnalysis(question, { refine, clarification: answer });
+}
+
+function hideClarify() {
+    pendingClarify = null;
+    clarifyEl.hidden = true;
+    clarifyEl.innerHTML = '';
+}
+
+/** Restore neutral placeholders (or the existing stack) after a clarify prompt. */
+function restoreIdleState() {
+    const loadingEl = document.getElementById('viewLoading');
+    if (loadingEl) loadingEl.remove();
+    if (ViewStore.length) {
+        renderViews();
+        renderActiveSide();
+    } else {
+        tableBody.innerHTML = '<div class="placeholder">Ask a question above — the result table will appear here.</div>';
+        summaryBody.innerHTML = '<div class="placeholder">A short summary of the result will appear here.</div>';
+        graphBody.innerHTML = '<div class="graph-empty">A chart of your result will appear here.</div>';
+    }
+}
+
+function send() { runAnalysis(input.value, { refine: false }); }
+
+function refine() {
+    runAnalysis(refineInput.value, { refine: true });
+    refineInput.value = '';
+}
+
+function clearRefinements() {
+    ViewStore.clearRefinements();
+    renderViews();
+    renderActiveSide();
+}
+
+// ── AI reasoning strip ────────────────────────────────────────────
+const thinkingEl = document.getElementById('thinking');
+const thinkingSteps = document.getElementById('thinkingSteps');
+const thinkingTitle = document.getElementById('thinkingTitle');
+const thinkingToggle = document.getElementById('thinkingToggle');
+
+// Stages that mirror what the server actually does for each request.
+const THINK_STAGES = [
+    'Reading and interpreting your question',
+    'Mapping it to a read-only query over the data',
+    'Filtering and crunching the numbers',
+    'Writing a plain-English summary',
+    'Choosing the most suitable chart',
+];
+let thinkTimer = null;
+
+function thinkRow(state, html) {
+    let mark;
+    if (state === 'active') mark = '<span class="t-spin"></span>';
+    else if (state === 'done') mark = '<span class="t-check"><svg viewBox="0 0 24 24" fill="#2e9e5b"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></span>';
+    else mark = '<span class="t-dot"></span>';
+    return `<li class="t-step ${state}"><span class="t-mark">${mark}</span><span>${html}</span></li>`;
+}
+
+function startThinking() {
+    thinkingEl.hidden = false;
+    thinkingEl.classList.remove('collapsed');
+    thinkingTitle.textContent = 'AI reasoning';
+    let i = 0;
+    const render = () => {
+        thinkingSteps.innerHTML = THINK_STAGES.map((s, k) =>
+            thinkRow(k < i ? 'done' : (k === i ? 'active' : 'pending'), escapeHtml(s))
+        ).join('');
+    };
+    render();
+    clearInterval(thinkTimer);
+    thinkTimer = setInterval(() => {
+        if (i < THINK_STAGES.length - 1) { i++; render(); }
+    }, 1100);
+}
+
+function failThinking(msg) {
+    clearInterval(thinkTimer);
+    thinkingTitle.textContent = 'AI reasoning — stopped';
+    thinkingSteps.innerHTML = thinkRow('pending', escapeHtml(msg || 'Could not complete the request.'));
+}
+
+// Build a genuine interpretation trace from the executed query plan (spec).
+function finishThinking(data, refine) {
+    clearInterval(thinkTimer);
+    thinkingTitle.textContent = refine ? 'How I refined the view' : 'How I interpreted your question';
+    const spec = data.spec || {};
+    const f = spec.filters || {};
+    const steps = [];
+
+    if (data.title) steps.push(`<span class="t-key">Understood as:</span> ${escapeHtml(data.title)}`);
+
+    const fp = [];
+    if (f.devices && f.devices.length) fp.push('devices ' + f.devices.join(', '));
+    if (f.rams && f.rams.length) fp.push('RAM ' + f.rams.join(', ') + ' GB');
+    if (f.scenarios && f.scenarios.length) fp.push('scenario ' + f.scenarios.join(', '));
+    if (f.metric_name_contains && f.metric_name_contains.length) fp.push('metric matching “' + f.metric_name_contains.join('”, “') + '”');
+    if (f.metric_types && f.metric_types.length) fp.push('type ' + f.metric_types.join(', '));
+    if (f.value_filters && f.value_filters.length) fp.push('value ' + f.value_filters.map(v => v.op + ' ' + v.value).join(' and '));
+    if (f.last_n) fp.push('most recent ' + f.last_n + ' iterations');
+    steps.push(`<span class="t-key">Filtered by:</span> ${fp.length ? escapeHtml(fp.join('; ')) : 'nothing — used all data'}`);
+
+    const gb = (spec.group_by || []).join(', ');
+    const ag = (spec.aggregations || []).join(', ');
+    if (gb || ag) steps.push(`<span class="t-key">Grouped by:</span> ${escapeHtml(gb || '—')} <span class="t-key">· computed:</span> ${escapeHtml(ag || '—')}`);
+    if (spec.derived && spec.derived.length) steps.push(`<span class="t-key">Derived columns:</span> ${escapeHtml(spec.derived.map(d => d.name || d.kind).join(', '))}`);
+    if (spec.sort) steps.push(`<span class="t-key">Sorted by:</span> ${escapeHtml(spec.sort.by + ' (' + spec.sort.order + ')')}${spec.limit ? ', top ' + spec.limit : ''}`);
+    else if (spec.limit) steps.push(`<span class="t-key">Limited to:</span> ${spec.limit} rows`);
+
+    if (data.chart && data.chart.type) {
+        const ch = data.chart.type === 'none' ? 'no chart (table is clearest here)' : data.chart.type.replace('_', ' ') + ' chart';
+        steps.push(`<span class="t-key">Visualized as:</span> ${escapeHtml(ch)}${data.chart.reason ? ' — ' + escapeHtml(data.chart.reason) : ''}`);
+    }
+    if (typeof data.matched_rows === 'number') steps.push(`<span class="t-key">Rows analyzed:</span> ${data.matched_rows}`);
+
+    thinkingSteps.innerHTML = steps.map(s => thinkRow('done', s)).join('');
+}
+
+thinkingToggle.addEventListener('click', () => thinkingEl.classList.toggle('collapsed'));
+
+sendBtn.addEventListener('click', send);
+input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+input.addEventListener('input', () => {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 130) + 'px';
+});
+document.getElementById('examples').addEventListener('click', e => {
+    if (e.target.classList.contains('example-chip')) {
+        input.value = e.target.textContent;
+        input.focus();
+    }
+});
+
+// Refinement (inner chatbox) + view switching.
+refineBtn.addEventListener('click', refine);
+refineInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); refine(); }
+});
+resetViewsBtn.addEventListener('click', clearRefinements);
+tableBody.addEventListener('click', onViewHeadClick);
+
+// ── Draggable splitters (adjustable panel sizes) ──────────────────
+const results = document.getElementById('results');
+const rightCol = document.getElementById('rightCol');
+
+function makeDrag(handle, container, axis) {
+    handle.addEventListener('mousedown', e => {
+        e.preventDefault();
+        document.body.classList.add('dragging');
+        const rect = container.getBoundingClientRect();
+
+        function onMove(ev) {
+            if (axis === 'x') {
+                let px = ev.clientX - rect.left;
+                px = Math.max(260, Math.min(px, rect.width - 280));
+                container.style.gridTemplateColumns = `${px}px 8px minmax(0, 1fr)`;
+            } else {
+                let px = ev.clientY - rect.top;
+                px = Math.max(120, Math.min(px, rect.height - 140));
+                container.style.gridTemplateRows = `${px}px 8px minmax(0, 1fr)`;
+            }
+        }
+        function onUp() {
+            document.body.classList.remove('dragging');
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+        }
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+    });
+}
+
+makeDrag(document.getElementById('vsplit'), results, 'x');
+makeDrag(document.getElementById('hsplit'), rightCol, 'y');
+</script>
+
+</body>
+</html>

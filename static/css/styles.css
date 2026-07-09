@@ -1,0 +1,798 @@
+/* HOBL Dashboard styles. Extracted from the original inline <style> block. */
+        :root {
+            --primary: #0078d4;
+            --primary-dark: #005a9e;
+            --bg: #f5f5f5;
+            --card-bg: #ffffff;
+            --border: #e0e0e0;
+            --text: #323130;
+            --text-secondary: #605e5c;
+            --iter-header-bg: #e8f0fe;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--primary);
+            color: white;
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+        }
+
+        header h1 { font-size: 20px; font-weight: 600; }
+
+        /* ── Data-source indicator (top-right of header) ── */
+        .ds-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 20px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        .ds-indicator:hover { background: rgba(255, 255, 255, 0.28); }
+        .ds-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #9aa3ad;
+            flex: 0 0 auto;
+            box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.25);
+        }
+        .ds-indicator.ds-kusto .ds-dot { background: #4caf50; }
+        .ds-indicator.ds-json .ds-dot { background: #ffb300; }
+        .ds-label { white-space: nowrap; }
+
+        /* ── Data-source modal ── */
+        .ds-modal-box { max-width: 520px; width: 92%; }
+        .ds-help { font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; line-height: 1.45; }
+        .ds-radio {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: border-color 0.15s ease, background 0.15s ease;
+        }
+        .ds-radio:hover { background: #f7f9fc; }
+        .ds-radio input { margin-top: 3px; cursor: pointer; }
+        .ds-radio-text { display: flex; flex-direction: column; gap: 2px; }
+        .ds-radio-text small { color: var(--text-secondary); font-size: 12px; }
+        .ds-radio input:disabled + .ds-radio-text { color: #aab2bd; }
+        .ds-json-panel { margin: 6px 0 12px; }
+        .ds-json-panel[hidden] { display: none; }
+        .ds-drop {
+            border: 2px dashed #c4d8f0;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            background: #f7fafe;
+            transition: border-color 0.15s ease, background 0.15s ease;
+        }
+        .ds-drop.is-dragover { border-color: var(--primary); background: #eaf3fc; }
+        .ds-drop-text { font-size: 13px; color: var(--text-secondary); margin-bottom: 10px; }
+        .ds-choose { display: inline-block; }
+        .ds-count { font-size: 12px; color: var(--text-secondary); margin-top: 10px; }
+        .ds-clear {
+            margin-top: 8px;
+            background: none;
+            border: none;
+            color: var(--primary);
+            font-size: 12px;
+            cursor: pointer;
+            padding: 4px 0;
+        }
+        .ds-clear:hover { text-decoration: underline; }
+        .ds-msg {
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            background: #eef7ee;
+            color: #2e7d32;
+        }
+        .ds-msg[hidden] { display: none; }
+        .ds-msg.is-error { background: #fdecea; color: #c0392b; }
+        .ds-actions { display: flex; justify-content: flex-end; }
+
+        .brand-logo {
+            width: 36px; height: 36px; border-radius: 50%;
+            display: block;
+        }
+
+        .ai-link {
+            margin-left: auto;
+            margin-right: 12px;
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            border: 1px solid rgba(255,255,255,0.6);
+            padding: 7px 14px;
+            border-radius: 4px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .ai-link:hover { background: rgba(255,255,255,0.15); }
+
+        .container {
+            max-width: 1800px;
+            margin: 24px auto;
+            padding: 0 24px;
+        }
+
+        /* ── Filters ────────────────────────────────────── */
+        .filters {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px 24px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            margin-bottom: 24px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 200px;
+            flex: 1;
+        }
+
+        .filter-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .filter-group select {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            background: white;
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        .filter-group input {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            background: white;
+            color: var(--text);
+        }
+
+        .filter-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(0,120,212,0.2);
+        }
+
+        .filter-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(0,120,212,0.2);
+        }
+
+        .filter-group select:disabled,
+        .filter-group input:disabled {
+            background: #f0f0f0;
+            color: #999;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        /* ── Multi-select checkbox dropdown ─────────────── */
+        .multiselect { position: relative; min-width: 180px; }
+        .ms-toggle {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 14px;
+            background: white;
+            color: var(--text);
+            cursor: pointer;
+            text-align: left;
+        }
+        .ms-toggle:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(0,120,212,0.2); }
+        .ms-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ms-caret { color: var(--text-secondary); font-size: 11px; flex: 0 0 auto; }
+        .ms-panel {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            z-index: 50;
+            min-width: 100%;
+            max-height: 280px;
+            overflow-y: auto;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+            padding: 6px;
+        }
+        .ms-actions {
+            display: flex;
+            gap: 12px;
+            padding: 4px 6px 8px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 4px;
+        }
+        .ms-actions a { font-size: 12px; color: var(--primary); text-decoration: none; }
+        .ms-actions a:hover { text-decoration: underline; }
+        .ms-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 6px;
+            font-size: 14px;
+            border-radius: 3px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .ms-item:hover { background: #eef2f8; }
+        .ms-item input { cursor: pointer; }
+
+        /* ── Filter actions / buttons ───────────────────── */
+        .filter-actions {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+            margin-left: auto;
+        }
+
+        .btn {
+            padding: 9px 20px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); }
+
+        .btn-secondary {
+            background: white;
+            color: var(--text-secondary);
+            border-color: var(--border);
+        }
+        .btn-secondary:hover { background: #f0f0f0; }
+
+        /* ── Status ─────────────────────────────────────── */
+        .status {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            font-size: 15px;
+        }
+
+        .status.error { color: #d13438; }
+
+        .spinner {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 8px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Table ──────────────────────────────────────── */
+        .table-wrapper {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .results-summary {
+            padding: 12px 24px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead th {
+            position: sticky;
+            top: 0;
+            background: var(--primary);
+            color: white;
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        tbody td {
+            padding: 10px 16px;
+            font-size: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tbody tr:hover { background: #f0f6ff; }
+
+        /* Iteration separator row */
+        .iter-header td {
+            background: var(--iter-header-bg);
+            font-weight: 600;
+            color: var(--primary-dark);
+            padding: 8px 16px;
+            font-size: 13px;
+            border-bottom: 2px solid var(--primary);
+        }
+
+        /* ── Transposed (Excel-style) table ─────────────────── */
+        .xtable-scroll {
+            overflow-x: auto;
+            max-width: 100%;
+            border: 1px solid #dbe2ea;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(15, 40, 80, 0.07);
+            background: var(--card-bg);
+        }
+        table.xtable {
+            border-collapse: separate;
+            border-spacing: 0;
+            font-size: 13px;
+            white-space: nowrap;
+        }
+        table.xtable td {
+            border-right: 1px solid #eef1f5;
+            border-bottom: 1px solid #eef1f5;
+            padding: 6px 12px;
+            text-align: center;
+        }
+        table.xtable td.num { text-align: center; font-variant-numeric: tabular-nums; }
+        table.xtable td.na { color: var(--text-secondary); font-style: italic; text-align: center; }
+        table.xtable td.row-label {
+            position: sticky;
+            left: 0;
+            z-index: 2;
+            background: #f4f6fa;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text);
+            min-width: 230px;
+            border-right: 1px solid #d7dee8;
+            box-shadow: 3px 0 6px -3px rgba(15, 40, 80, 0.18);
+        }
+        table.xtable tr:hover td { background: #eaf3ff; }
+        table.xtable tr:hover td.row-label { background: #e2ecfa; }
+        table.xtable tr.hdr-row td { background: #fafbfd; color: var(--text-secondary); }
+        table.xtable tr.hdr-row td.row-label { background: #eef1f6; color: var(--text); }
+        table.xtable tr.scenario-row td,
+        table.xtable tr.date-row td,
+        table.xtable tr.filepath-row td,
+        table.xtable tr.iter-row td {
+            background: #eef2f8;
+            font-weight: 600;
+            color: var(--primary-dark);
+        }
+        table.xtable tr.scenario-row td {
+            background: linear-gradient(180deg, #e7eef8 0%, #dde7f4 100%);
+            font-size: 13.5px;
+            letter-spacing: 0.2px;
+        }
+        table.xtable tr.iter-row td { border-bottom: 2px solid #d3deee; }
+
+        /* Device-constant, Scenario and Date values span a block and are pinned just
+           right of the sticky row-label column, so the value stays left-aligned and
+           visible while scrolling until the next block's value scrolls in. */
+        table.xtable td.const-cell,
+        table.xtable td.scenario-cell,
+        table.xtable td.date-cell { text-align: left; padding: 0; }
+        table.xtable td.const-cell .sticky-const,
+        table.xtable td.scenario-cell .sticky-const,
+        table.xtable td.date-cell .sticky-const {
+            position: sticky;
+            left: 232px;
+            display: inline-block;
+            padding: 7px 12px;
+            background: #fafbfc;
+            font-weight: 600;
+            color: var(--text);
+        }
+        table.xtable td.scenario-cell .sticky-const { background: transparent; color: var(--primary-dark); }
+        table.xtable td.date-cell { background: #eef2f8; }
+        table.xtable td.date-cell .sticky-const { background: #eef2f8; color: var(--primary-dark); }
+        table.xtable tr:hover td.const-cell .sticky-const,
+        table.xtable tr:hover td.scenario-cell .sticky-const,
+        table.xtable tr:hover td.date-cell .sticky-const { background: #eaf3ff; }
+        /* Light, thin divider between distinct dates within a scenario group —
+           lighter and thinner than the strong scenario group divider (grp-start). */
+        table.xtable td.date-cell.date-div { border-left: 1px solid #c4d8f0; }
+        /* Strong divider between Device + config + Scenario groups. */
+        table.xtable td.grp-start { border-left: 3px solid var(--primary); }
+        /* Per-group summary columns (P50/P70/P90/CoV): lighter, thinner accent so
+           they read as a sub-block, clearly distinct from the scenario divider. */
+        table.xtable td.stat-start { border-left: 2px solid #c4d8f0; }
+        table.xtable td.stat { text-align: center; background: #f2f7fd; font-variant-numeric: tabular-nums; }
+        table.xtable td.stat.na { color: #9aa3ad; font-style: italic; }
+        table.xtable td.stat.cov { color: #6a4fb0; font-weight: 600; }
+        /* When the CoV heatmap is applied, the cell carries an inline gradient
+           background, so use dark text for contrast over green/yellow/red. */
+        table.xtable td.stat.cov.cov-heat { color: #243b53; }
+        table.xtable td.stat.stretch { color: #1d7a5f; font-weight: 600; }
+        table.xtable tr.iter-row td.stat.stat-hdr,
+        table.xtable td.stat.stat-hdr {
+            font-weight: 700;
+            background: #dde8f7;
+            color: var(--primary-dark);
+            letter-spacing: 0.3px;
+        }
+        table.xtable tr:hover td.stat { background: #e3eefb; }
+
+        /* Zebra striping over the data area (continuous across sections). */
+        table.xtable tr.metric-row.alt td.num,
+        table.xtable tr.metric-row.alt td.na { background: #f7f9fd; }
+        table.xtable tr.metric-row.alt td.stat { background: #eaf1fb; }
+        table.xtable tr.metric-row.alt td.row-label { background: #eef1f6; }
+        table.xtable tr.metric-row:hover td.num,
+        table.xtable tr.metric-row:hover td.na { background: #eaf3ff; }
+        table.xtable tr.metric-row:hover td.stat { background: #e3eefb; }
+        table.xtable tr.metric-row:hover td.row-label { background: #e2ecfa; }
+
+        table.xtable tr.section-row td {
+            background: linear-gradient(180deg, #1487e0 0%, var(--primary) 60%, var(--primary-dark) 100%);
+            color: #fff;
+            text-align: left;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            font-size: 12.5px;
+            padding: 0;
+        }
+        /* A wide colspan cell can't itself stick (it fills its row), so pin the
+           title text in a sticky span so it stays visible while scrolling. */
+        table.xtable tr.section-row td .section-title {
+            position: sticky;
+            left: 0;
+            z-index: 3;
+            display: inline-block;
+            padding: 8px 12px;
+        }
+
+        .metric-type {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .metric-type.PowerMetrics { background: #e8f5e9; color: #2e7d32; }
+        .metric-type.PowerCalculation { background: #fff3e0; color: #e65100; }
+        .metric-type.PerfMetrics { background: #e3f2fd; color: #1565c0; }
+
+        .value-cell { font-family: 'Consolas', 'Courier New', monospace; font-weight: 600; }
+
+        /* ── Power metric picker (Table Specified view) ──── */
+        .power-toolbar { position: relative; margin-bottom: 10px; }
+        .power-btn {
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            cursor: pointer;
+        }
+        .power-btn:hover { background: #f0f6ff; border-color: var(--primary); }
+        .power-panel {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            z-index: 30;
+            margin-top: 4px;
+            background: #fff;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+            padding: 10px 14px;
+            max-height: 360px;
+            overflow-y: auto;
+            min-width: 280px;
+        }
+        .power-group-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: var(--text-secondary);
+            margin: 8px 0 4px;
+        }
+        .power-group-title:first-child { margin-top: 0; }
+        .power-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            padding: 3px 2px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .power-item:hover { background: #f0f6ff; }
+        .power-item input { cursor: pointer; }
+
+        /* ── Charts (Box & Whisker view) ────────────────── */
+        .chart-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px 20px 8px;
+            margin-bottom: 20px;
+        }
+
+        .chart-card h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+
+        .chart-card .chart-sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .chart-empty {
+            padding: 24px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .box-holder { overflow-x: auto; overflow-y: hidden; }
+
+        .chart-note {
+            background: #fffbe6;
+            border: 1px solid #ffe58f;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 13px;
+            color: #614700;
+            margin-bottom: 20px;
+        }
+
+        .chart-card .chart-sub::after {
+            content: ' Click a metric to zoom in.';
+            color: var(--primary);
+        }
+
+        /* ── Zoom modal ─────────────────────────────────── */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 24px;
+        }
+        .modal-overlay[hidden] { display: none; }
+
+        .modal-box {
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+            width: min(1000px, 96vw);
+            max-height: 92vh;
+            overflow: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+            color: var(--text-secondary);
+            padding: 0 4px;
+        }
+        .modal-close:hover { color: var(--text); }
+
+        .modal-body { padding: 16px 20px 20px; }
+        #modalChart { width: 100%; }
+
+        .pct-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+        .pct-controls label { font-weight: 600; font-size: 13px; color: var(--text); }
+        .pct-controls select {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 13px;
+            min-width: 260px;
+        }
+
+        /* Three metric-type dropdowns (perf / power calc / power rails). */
+        .pct-controls-multi {
+            align-items: stretch;
+            gap: 14px;
+            flex-wrap: wrap;
+            background: #f7f9fc;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px 14px;
+        }
+        .pct-dd { display: flex; flex-direction: column; gap: 6px; min-width: 240px; flex: 1; }
+        .pct-dd-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .pct-dd-title {
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: var(--text-secondary);
+        }
+        .pct-dd.is-active .pct-dd-title { color: var(--primary-dark); }
+        /* Radio circle: hollow when inactive, filled-dot when active. */
+        .pct-radio {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            margin: 0;
+            border: 2px solid #b6c0cc;
+            border-radius: 50%;
+            background: white;
+            cursor: pointer;
+            flex: 0 0 auto;
+            position: relative;
+            transition: border-color 0.12s ease;
+        }
+        .pct-radio:hover:not(:disabled) { border-color: var(--primary); }
+        .pct-radio:checked {
+            border-color: var(--primary);
+        }
+        .pct-radio:checked::after {
+            content: '';
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--primary);
+            transform: translate(-50%, -50%);
+        }
+        .pct-radio:disabled { cursor: not-allowed; border-color: #dde2e8; }
+        .pct-msel { position: relative; }
+        .pct-mtoggle:disabled {
+            background: #eef0f3;
+            color: #9aa3ad;
+            cursor: not-allowed;
+            border-color: #e2e5ea;
+        }
+        .pct-dd-empty { font-weight: 500; text-transform: none; letter-spacing: 0; color: #aab2bd; }
+
+        .pct-sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        /* Stacked per-metric chart blocks (when "All" is selected). */
+        .pct-block { margin-bottom: 18px; }
+        .pct-block + .pct-block { border-top: 1px dashed var(--border); padding-top: 14px; }
+        .pct-block-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            margin-bottom: 6px;
+        }
+        .pct-chart { width: 100%; }
+
+        #modalStats { margin-top: 8px; }
+        #modalStats table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        #modalStats th, #modalStats td {
+            border: 1px solid var(--border);
+            padding: 6px 10px;
+            text-align: right;
+            white-space: nowrap;
+        }
+        #modalStats th { background: #f5f7fa; color: var(--text); font-weight: 600; }
+        #modalStats td:first-child, #modalStats th:first-child { text-align: left; }
+        .stats-swatch {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 2px;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+
+        #pctStats { margin-top: 18px; }
+        .pct-stats-table {
+            border-collapse: collapse;
+            font-size: 13px;
+            width: 100%;
+            max-width: 640px;
+        }
+        .pct-stats-table th, .pct-stats-table td {
+            border: 1px solid var(--border);
+            padding: 6px 12px;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .pct-stats-table th { background: #f5f7fa; color: var(--text); font-weight: 600; }
+        .pct-stats-table td:first-child, .pct-stats-table th:first-child { text-align: left; }
+        .pct-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
