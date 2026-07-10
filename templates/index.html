@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{# Single-page dashboard shell: a shared filter bar, a results container that
+   each viewer renders into, and the zoom modal used by the Box & Whisker view.
+   The per-viewer rendering logic lives in static/js/{table,box,percentile}.js
+   and is dispatched by renderCurrentView() in static/js/common.js. #}
+
+{% block content %}
+<div class="container">
+    <!-- Filters -->
+    <div class="filters">
+        <div class="filter-group">
+            <label>Device</label>
+            <div class="multiselect" id="deviceMS"></div>
+        </div>
+        <div class="filter-group">
+            <label>RAM Config</label>
+            <div class="multiselect" id="ramMS"></div>
+        </div>
+        <div class="filter-group">
+            <label>Scenario</label>
+            <div class="multiselect" id="scenarioMS"></div>
+        </div>
+        <div class="filter-group">
+            <label>Host Name</label>
+            <div class="multiselect" id="hostMS"></div>
+        </div>
+        <div class="filter-group">
+            <label>Start Date</label>
+            <input type="date" id="startDate">
+        </div>
+        <div class="filter-group">
+            <label>End Date</label>
+            <input type="date" id="endDate">
+        </div>
+        <div class="filter-group">
+            <label>Last N Iterations</label>
+            <input type="number" id="lastN" min="1" step="1" placeholder="All">
+        </div>
+        <div class="filter-group">
+            <label>View</label>
+            <select id="viewSelect">
+                <option value="table">Table (Specified)</option>
+                <option value="table_all">Table (All Metrics)</option>
+                <option value="box">Box &amp; Whisker</option>
+                <option value="percentile">Percentile Distribution</option>
+            </select>
+        </div>
+        <div class="filter-actions">
+            <button id="applyBtn" class="btn btn-primary">Apply</button>
+            <button id="resetBtn" class="btn btn-secondary">Reset</button>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div id="results">
+        <div class="status">Choose any filters (or none) and click <strong>Apply</strong> to view metrics.</div>
+    </div>
+</div>
+
+<!-- Zoom modal for a single metric's box plot -->
+<div id="metricModal" class="modal-overlay" hidden>
+    <div class="modal-box">
+        <div class="modal-header">
+            <span id="modalTitle">Metric</span>
+            <button id="modalClose" class="modal-close" aria-label="Close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="modalChart"></div>
+            <div id="modalStats"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/common.js') }}"></script>
+<script src="{{ url_for('static', filename='js/table.js') }}"></script>
+<script src="{{ url_for('static', filename='js/box.js') }}"></script>
+<script src="{{ url_for('static', filename='js/percentile.js') }}"></script>
+{% endblock %}

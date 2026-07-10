@@ -1,0 +1,30 @@
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Runtime logs
+*.log
+flask.log
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Runtime data-source state + user-uploaded JSON files
+runtime_state.json
+uploaded_json/
+
+# Local Kusto check / diagnostic scripts (not part of the app)
+kusto_check.py
+kusto_diag.py
+kusto_meta_keys.py
+kusto_meta_verify.py
+_dupcheck.py
