@@ -161,6 +161,20 @@ Once all three filters are selected, the metrics are displayed in a table with t
 
 **Grouping:** Metrics are grouped by iteration. A blue header row separates each iteration (e.g., "Iteration 1", "Iteration 2"). Within each iteration, metrics are sorted by type and then by name.
 
+**Device-specific calculated power:** Heracles publishes memory power from
+`pm_emi_memory`, display power from `pm_emi_3p3v_panel_in + pm_emi_bklt_in`,
+SoC power as `(pm_emi_vsys_core * 0.94) - memory_power`, and system power as
+`pm_emi_vsys_core + pm_emi_vsys_rop`. NVIDIA Minos publishes calculated power
+from its raw rails: system/total power uses `pm_emi_sys` (or
+`pm_emi_system`); SoC power is 85% of the sum of
+`PMIC_MT6363`, `PMIC_MT6373`, `CPU_P`, `CPU_E`, `GPU_M`, `GPU_C`, `CORE`, and
+`DLA (NPU)`; memory, CPU, NPU, GPU, storage, Wi-Fi, camera, keyboard, SAM, and
+touch power each sum all rails with their corresponding `pm_emi_<component>`
+prefix; display power sums `pm_emi_display_panel` and
+`pm_emi_display_backlight`. These derived values are emitted as
+`PowerCalculation` rows even when the source run did not contain placeholders.
+Battery life is calculated in hours as `battery_capacity_wh / system_power`.
+
 ---
 
 ## 6. Kusto Table Schema

@@ -12,8 +12,10 @@ Schema (confirmed against cluster ``fungateprd.centralus`` / db
   ``Value`` (real), ``Unit``, ``RunDate`` (datetime, the test run date),
   ``TestName`` (now just the scenario, e.g. ``youtube``), ``TierDisplayName``
   (``<device>_<usable_ram>_<scenario>``) and ``TestResultId``. There is NO ``Pt``
-  column: for PerfMetrics the pt + ordering are encoded in ``Name`` as
-  ``<metricname>_<ptnumber>_<orderingnumber>``.
+  column: legacy PerfMetrics encode pt + ordering in ``Name`` as
+  ``<metricname>_<ptnumber>_<orderingnumber>``; newer names use
+  ``Perftrack_<workload>_<metricname>_<orderingnumber>`` and are mapped back to
+  their legacy pt identity by metric signature.
 * ``Hobl_TestResultMetadata`` — one row per result. ``TestResultId`` (guid) plus a
   ``Metadata`` dynamic column holding the DUT attributes and run context
   (``DeviceName``, ``UsableRam``, ``DefaultRam``, ``hostname``, ``IHV``,
@@ -41,24 +43,71 @@ from azure.identity import InteractiveBrowserCredential
 from azure.kusto.data import KustoClient, KustoConnectionStringBuilder
 
 import config
+from device_names import canonical_device_kql, uses_raw_rails_only
+from power_calculations import (
+    apply_battery_life,
+    apply_heracles_component_power,
+    apply_heracles_power,
+    apply_minos_power,
+    apply_purwa_display_power,
+    apply_purwa_rop,
+    is_display_power_metric,
+    is_rop_metric,
+    is_soc_power_metric,
+    is_system_power_metric,
+)
 
 _client = None
 
-# PerfMetrics encode pt + ordering at the end of the metric name. Real ingested
-# data uses ``<metricname>_<ptnumber>_<orderingnumber>`` (e.g.
-# ``Edge_Navigation_To_First_Paint__Stable__9412_1``); an optional ``pt`` literal
-# before the pt number is also accepted (``..._pt9412_1``).
-_PERF_NAME_RE = re.compile(r"^(?P<base>.+?)_+(?:pt)?(?P<pt>\d+)_(?P<order>\d+)$")
+# Legacy PerfMetrics encode pt + ordering at the end of the metric name. Newer
+# ingestion removes the pt and prepends ``Perftrack_<workload>_`` instead.
+_LEGACY_PERF_NAME_RE = re.compile(
+    r"^(?P<base>.+?)_+(?:pt)?(?P<pt>\d+)_(?P<order>\d+)$"
+)
+_NEW_PERF_NAME_RE = re.compile(
+    r"^Perftrack_.+?_(?P<metric>.+)_(?P<order>\d+)$", re.IGNORECASE
+)
+
+# Ordered from more specific to less specific because a new row can include a
+# workload prefix and more than one recognizable phrase.
+_NEW_PERF_PT_SIGNATURES = [
+    ("Edge_Startup_Stable__Shell_Click____First_Render", 8998),
+    ("Edge_MSN_Tab_Anylayout_NewTab__Stable", 9471),
+    ("Edge_Navigation_To_First_Paint__Stable", 9412),
+    ("Office_Outlook_Boot_v2", 8804),
+    ("Office_Word_Boot_v2", 8805),
+    ("Office_XL_Boot_v2", 8806),
+    ("Office_PPT_Boot_v2", 8807),
+    ("_FE_Xaml_Home__File_Explorer_Launch_to_XAML_Home", 9475),
+    ("Snipping_Tool_Overlay_Launch_Performance", 9971),
+    ("Type_to_Search__TopResultRender", 10010),
+    ("_TIP__Search_Full_Activation", 9232),
+    ("_TIP__Start_Launch", 1809),
+    ("InputProcessDelay_PC", 6352),
+]
 
 
 def _parse_perf_name(name: str):
     """Split a PerfMetrics name into (base, pt:int, order:int).
 
-    Real ingested names look like ``Edge_..._Stable__9412_1`` (pt + ordering at
-    the end, no literal ``pt``; the older ``..._pt9412_1`` form is also accepted).
-    Returns ``None`` when the name doesn't carry a pt/order suffix.
+    Legacy names look like ``Edge_..._Stable__9412_1``. New names look like
+    ``Perftrack_Reddit_Edge_..._Stable__1``; their metric signature is mapped to
+    the same historical pt so old and new uploads populate the same table row.
+    Returns ``None`` for no-pt metrics such as ``teams_fps``.
     """
-    m = _PERF_NAME_RE.match(name or "")
+    normalized = name or ""
+    new_match = _NEW_PERF_NAME_RE.match(normalized)
+    if new_match:
+        metric = new_match.group("metric").rstrip("_")
+        metric_lower = metric.lower()
+        for signature, pt in _NEW_PERF_PT_SIGNATURES:
+            signature_index = metric_lower.find(signature.lower())
+            if signature_index >= 0:
+                base = metric[signature_index:].rstrip("_")
+                return base, pt, int(new_match.group("order"))
+        return None
+
+    m = _LEGACY_PERF_NAME_RE.match(normalized)
     if not m:
         return None
     base = m.group("base").rstrip("_")
@@ -174,10 +223,12 @@ def _meta_let() -> str:
         "    M_HWVersion = tostring(_md.HWVersion),\n"
         "    M_Battery = tostring(_md.BatteryCapacity_wh),\n"
         "    M_DefaultRam = tostring(_md.DefaultRam),\n"
+        "    M_ResultPath = tostring(_md.ResultPath),\n"
         "    M_IterNum = tostring(_md.IterationNumber),\n"
         "    M_Tier = tostring(_md.TierDefinitionKey)\n"
         "| project TRID, M_Device, M_Ram, M_Host, M_DUTType, M_IHV, M_LKG,\n"
-        "    M_OSBuild, M_HWVersion, M_Battery, M_DefaultRam, M_IterNum, M_Tier;\n"
+        "    M_OSBuild, M_HWVersion, M_Battery, M_DefaultRam, M_ResultPath,\n"
+        "    M_IterNum, M_Tier;\n"
     )
 
 
@@ -189,7 +240,7 @@ def _joined(filter_clauses: list[str]) -> str:
         + f"{config.KUSTO_TABLE}\n"
         "| extend TRID = tostring(TestResultId)\n"
         "| join kind=inner (_meta) on TRID\n"
-        "| extend Device = M_Device, Ram = M_Ram, Host = M_Host\n"
+        f"| extend Device = {canonical_device_kql()}, Ram = M_Ram, Host = M_Host\n"
         "| extend Tier = iif(isnotempty(M_Tier), M_Tier, TierDisplayName)\n"
         "| extend _prefix = strcat(Device, '_', Ram, '_')\n"
         "| extend _scnFromTier = iif(isnotempty(Device) and isnotempty(Ram) and "
@@ -364,7 +415,7 @@ def get_metrics(
     kql = (
         _joined(clauses)
         + "| project Device, Ram, Scenario, Date, RunTs, TRID, Iteration, M_IterNum,\n"
-        "    SuffixIter, Name, Value, Unit, MetricType"
+        "    SuffixIter, Name, Value, Unit, MetricType, M_DUTType, M_Battery"
     )
     projected = []
     for r in _run_query(kql):
@@ -372,6 +423,8 @@ def get_metrics(
         if value is None:
             continue
         mtype = r.get("MetricType")
+        if uses_raw_rails_only(r.get("Device")) and _is(mtype, "PowerCalculation"):
+            continue
         name = _normalize_name(r.get("Name"))
         metric_name, pt = name, "N/A"
         if _is(mtype, "PerfMetrics"):
@@ -386,6 +439,8 @@ def get_metrics(
                 "Date": r.get("Date") or "",
                 "_RunTs": r.get("RunTs"),
                 "_TRID": r.get("TRID"),
+                "_DUTType": r.get("M_DUTType"),
+                "_Battery": r.get("M_Battery"),
                 "Iteration": _resolve_iteration(
                     r.get("Iteration"), r.get("M_IterNum"), r.get("SuffixIter")
                 ),
@@ -396,6 +451,86 @@ def get_metrics(
                 "Pt": pt,
             }
         )
+
+    run_rows: dict = {}
+    for row in projected:
+        run_rows.setdefault(row["_TRID"], []).append(row)
+    for rows in run_rows.values():
+        calculations = {
+            row["MetricName"]: {"value": row["Value"], "unit": row["Unit"]}
+            for row in rows if _is(row["MetricType"], "PowerCalculation")
+        }
+        power_metrics = {
+            row["MetricName"]: {"value": row["Value"], "unit": row["Unit"]}
+            for row in rows if _is(row["MetricType"], "PowerMetrics")
+        }
+        display_corrected = apply_purwa_display_power(
+            calculations, power_metrics, rows[0]["Device"], rows[0]["_DUTType"]
+        )
+        rop_corrected = apply_purwa_rop(
+            calculations, rows[0]["Device"], rows[0]["_DUTType"]
+        )
+        corrected_names = apply_heracles_component_power(
+            calculations,
+            power_metrics,
+            rows[0]["Device"],
+            rows[0]["_DUTType"],
+        )
+        soc_corrected, system_corrected = apply_heracles_power(
+            calculations,
+            power_metrics,
+            rows[0]["Device"],
+            rows[0]["_DUTType"],
+        )
+        corrected_names.update(apply_minos_power(
+            calculations,
+            power_metrics,
+            rows[0]["Device"],
+            rows[0]["_DUTType"],
+        ))
+        if soc_corrected:
+            corrected_names.update(
+                name for name in calculations if is_soc_power_metric(name)
+            )
+        if system_corrected:
+            corrected_names.update(
+                name for name in calculations if is_system_power_metric(name)
+            )
+        battery_life_name = apply_battery_life(
+            calculations, rows[0]["_Battery"]
+        )
+        if battery_life_name:
+            corrected_names.add(battery_life_name)
+        if display_corrected or rop_corrected or corrected_names:
+            for row in rows:
+                if _is(row["MetricType"], "PowerCalculation") and (
+                    (display_corrected and is_display_power_metric(row["MetricName"]))
+                    or (rop_corrected and is_rop_metric(row["MetricName"]))
+                    or row["MetricName"] in corrected_names
+                ):
+                    corrected = calculations[row["MetricName"]]
+                    row["Value"] = corrected["value"]
+                    row["Unit"] = corrected["unit"]
+            existing_names = {
+                row["MetricName"]
+                for row in rows
+                if _is(row["MetricType"], "PowerCalculation")
+            }
+            for name in corrected_names - existing_names:
+                corrected = calculations[name]
+                synthetic = rows[0].copy()
+                synthetic.update(
+                    {
+                        "MetricName": name,
+                        "Value": corrected["value"],
+                        "Unit": corrected["unit"],
+                        "MetricType": "PowerCalculation",
+                        "Pt": "N/A",
+                    }
+                )
+                rows.append(synthetic)
+                projected.append(synthetic)
+
     projected.sort(
         key=lambda r: (
             r["Device"],
@@ -410,6 +545,8 @@ def get_metrics(
     for row in result:
         row.pop("_RunTs", None)
         row.pop("_TRID", None)
+        row.pop("_DUTType", None)
+        row.pop("_Battery", None)
     return result
 
 
@@ -431,7 +568,8 @@ def get_table_data(
         _joined(clauses)
         + "| project Device, Ram, Scenario, Date, RunTs, Iteration, M_IterNum, SuffixIter,\n"
         "    Name, Value, Unit, MetricType, TRID, M_Host, M_DUTType, M_IHV,\n"
-        "    M_LKG, M_OSBuild, M_HWVersion, M_Battery, M_DefaultRam, M_Device"
+        "    M_LKG, M_OSBuild, M_HWVersion, M_Battery, M_DefaultRam, M_ResultPath,\n"
+        "    M_Device"
     )
 
     # Group metric rows by result (TestResultId); each group = one column.
@@ -443,8 +581,10 @@ def get_table_data(
     for rows in groups.values():
         meta = rows[0]
         ram_val = meta.get("Ram") or ""
+        raw_rails_only = uses_raw_rails_only(meta.get("Device"))
 
         header = {label: (meta.get(key) or "") for label, key in _HEADER_LABEL_TO_METAKEY}
+        header["Device name"] = meta.get("Device") or ""
         header["Usable RAM"] = ram_val
         header["Host Name"] = meta.get("M_Host") or ""
 
@@ -460,7 +600,7 @@ def get_table_data(
             mtype = r.get("MetricType")
             name = _normalize_name(r.get("Name"))
             unit = r.get("Unit") or ""
-            if _is(mtype, "PowerCalculation"):
+            if _is(mtype, "PowerCalculation") and not raw_rails_only:
                 calc_map[name] = {"value": value, "unit": unit}
             elif _is(mtype, "PowerMetrics"):
                 pm_map[name] = {"value": value, "unit": unit}
@@ -472,6 +612,35 @@ def get_table_data(
                 else:
                     perf_by_name[name] = value
                     perf_all.append({"pt": None, "name": name, "value": value, "unit": unit})
+
+        if not raw_rails_only:
+            apply_purwa_display_power(
+                calc_map, pm_map, meta.get("M_Device"), meta.get("M_DUTType")
+            )
+            apply_purwa_rop(calc_map, meta.get("M_Device"), meta.get("M_DUTType"))
+            apply_heracles_component_power(
+                calc_map,
+                pm_map,
+                meta.get("M_Device"),
+                meta.get("Device"),
+                meta.get("M_DUTType"),
+            )
+            apply_heracles_power(
+                calc_map,
+                pm_map,
+                meta.get("M_Device"),
+                meta.get("Device"),
+                meta.get("M_DUTType"),
+            )
+            apply_minos_power(
+                calc_map,
+                pm_map,
+                meta.get("M_Device"),
+                meta.get("Device"),
+                meta.get("M_IHV"),
+                meta.get("M_DUTType"),
+            )
+            apply_battery_life(calc_map, meta.get("M_Battery"))
 
         perf_by_pt: dict = {}
         for pt, samples in perf_pt_samples.items():
@@ -485,12 +654,13 @@ def get_table_data(
 
         columns.append(
             {
-                "Device": meta.get("M_Device") or meta.get("Device") or "",
+                "Device": meta.get("Device") or "",
                 "Ram": ram_val,
                 "Scenario": meta.get("Scenario") or "",
                 "Date": meta.get("Date") or "",
                 "_RunTs": meta.get("RunTs"),
                 "_TRID": meta.get("TRID"),
+                "FilePath": meta.get("M_ResultPath") or "",
                 "Iteration": _resolve_iteration(
                     meta.get("Iteration"), meta.get("M_IterNum"), meta.get("SuffixIter")
                 ),

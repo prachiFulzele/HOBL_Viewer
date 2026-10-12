@@ -22,7 +22,7 @@ const CURATED_PERF = [
     { label: 'Start Launch', kind: 'pct', pts: [1809, 9917] },
     { label: 'File Explorer Launch', kind: 'first', pts: [9475, 10052] },
     { label: 'Snipping Tool Overlay Launch Performance', kind: 'first', pts: [9971] },
-    { label: 'Type-to-Search', kind: 'pct', pts: [2430, 9459] },
+    { label: 'Type-to-Search', kind: 'pct', pts: [2430, 9459, 10010] },
     { label: 'Search Full Activation', kind: 'pct', pts: [9232] },
     { label: 'Explorer Input Delay', kind: 'first', pts: [6352] },
     { label: 'Teams FPS', kind: 'first', pts: [], name: 'teams_fps' },
@@ -52,6 +52,11 @@ const DEFAULT_POWER_KEYS = DEFAULT_POWER.map(d => 'calc:' + d.name);
 // picker doesn't refetch. `powerPanelOpen` keeps the picker open across renders.
 let powerSelection = null;
 let powerPanelOpen = false;
+const PERFORMANCE_EXPORT_SCENARIOS = new Set([
+    'consumer_multitasker',
+    'mincp_base',
+    'enterprise_collab',
+]);
 
 // Gather every available power metric (de-duped, with its unit) from the columns.
 function powerCatalog(cols) {
@@ -76,7 +81,10 @@ function railLabel(name, unit) { return unit ? `${name} (${unit})` : name; }
 // The ordered list of power rows to display: defaults first (canonical order),
 // then any other selected power_calculation metrics, then selected rails.
 function activePowerRows(cat) {
-    const sel = powerSelection || new Set(DEFAULT_POWER_KEYS);
+    const defaultKeys = cat.calc.some(name => DEFAULT_LABEL_BY_NAME[name])
+        ? DEFAULT_POWER_KEYS
+        : cat.rail.map(name => 'rail:' + name);
+    const sel = powerSelection || new Set(defaultKeys);
     const rows = [];
     DEFAULT_POWER.forEach(d => {
         if (sel.has('calc:' + d.name) && cat.calc.includes(d.name)) {
@@ -92,6 +100,13 @@ function activePowerRows(cat) {
         if (sel.has('rail:' + n)) rows.push({ src: 'rail', name: n, label: railLabel(n, cat.unitR[n]) });
     });
     return rows;
+}
+
+function allPowerRows(cat) {
+    return [
+        ...cat.calc.map(name => ({ src: 'calc', name, label: calcLabel(name, cat.unitC[name]) })),
+        ...cat.rail.map(name => ({ src: 'rail', name, label: railLabel(name, cat.unitR[name]) })),
+    ];
 }
 
 // The collapsible power-metric picker (defaults pre-checked).
@@ -279,7 +294,105 @@ function curatedSamples(col, cfg) {
     return null;
 }
 
-function renderTableTransposed(cols, curated) {
+function formatExportWorksheet(sheet) {
+    if (!sheet['!ref']) return;
+
+    const range = XLSX.utils.decode_range(sheet['!ref']);
+    const sectionRows = new Set();
+    for (let row = range.s.r; row <= range.e.r; row++) {
+        const firstCell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
+        if (firstCell && (firstCell.v === 'Power Metrics' || firstCell.v === 'Performance Metrics')) {
+            sectionRows.add(row);
+        }
+    }
+
+    const border = {
+        top: { style: 'thin', color: { rgb: 'D8DEE8' } },
+        bottom: { style: 'thin', color: { rgb: 'D8DEE8' } },
+        left: { style: 'thin', color: { rgb: 'D8DEE8' } },
+        right: { style: 'thin', color: { rgb: 'D8DEE8' } },
+    };
+    const headerLabels = new Set([...CONST_LABELS, ...VAR_LABELS, 'Scenario', 'Date', 'File Path', 'Iteration']);
+
+    for (let row = range.s.r; row <= range.e.r; row++) {
+        const firstCell = sheet[XLSX.utils.encode_cell({ r: row, c: 0 })];
+        const firstValue = firstCell ? String(firstCell.v ?? '') : '';
+        const isSection = sectionRows.has(row);
+        const isHeader = headerLabels.has(firstValue);
+
+        for (let col = range.s.c; col <= range.e.c; col++) {
+            const address = XLSX.utils.encode_cell({ r: row, c: col });
+            const cell = sheet[address];
+            if (!cell) continue;
+
+            cell.s = {
+                font: { name: 'Aptos', sz: 10, color: { rgb: '1F2937' }, bold: col === 0 || isHeader },
+                fill: { fgColor: { rgb: col === 0 ? 'E8EEF6' : (isHeader ? 'F3F6FA' : (row % 2 ? 'FFFFFF' : 'F8FAFC')) } },
+                border,
+                alignment: { vertical: 'center', horizontal: col === 0 ? 'left' : 'center', wrapText: true },
+            };
+            if (isSection) {
+                cell.s.font = { name: 'Aptos Display', sz: 11, bold: true, color: { rgb: 'FFFFFF' } };
+                cell.s.fill = { fgColor: { rgb: '1F4E78' } };
+                cell.s.alignment = { vertical: 'center', horizontal: 'left', wrapText: true };
+            } else if (firstValue === 'Iteration') {
+                cell.s.font.bold = true;
+                cell.s.fill = { fgColor: { rgb: 'D9EAF7' } };
+            }
+        }
+    }
+
+    sheet['!cols'] = Array.from({ length: range.e.c + 1 }, (_, col) => ({ wch: col === 0 ? 42 : 15 }));
+    sheet['!rows'] = Array.from({ length: range.e.r + 1 }, (_, row) => ({ hpt: sectionRows.has(row) ? 24 : 21 }));
+    sheet['!margins'] = { left: 0.25, right: 0.25, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 };
+    sheet['!pageSetup'] = { orientation: 'landscape', fitToWidth: 1, fitToHeight: 0 };
+}
+
+function exportDisplayedTable(curated) {
+    if (!currentTable || !currentTable.length) return;
+    if (!window.XLSX) {
+        window.alert('Excel export is unavailable. Reload the page and try again.');
+        return;
+    }
+
+    const tiers = new Map();
+    currentTable.forEach(col => {
+        const tierName = `${col.Device}_${col.Ram}_${col.Scenario}`;
+        if (!tiers.has(tierName)) tiers.set(tierName, []);
+        tiers.get(tierName).push(col);
+    });
+
+    const workbook = XLSX.utils.book_new();
+    const usedSheetNames = new Set();
+    const exportPowerCatalog = powerCatalog(currentTable);
+    tiers.forEach((cols, tierName) => {
+        const scenario = String(cols[0].Scenario || '').toLowerCase();
+        const includePerformance = PERFORMANCE_EXPORT_SCENARIOS.has(scenario);
+        renderTableTransposed(cols, curated, exportPowerCatalog, includePerformance);
+        const table = resultsDiv.querySelector('table.xtable');
+        if (!table) return;
+
+        const baseName = tierName.replace(/[\\/?*\[\]:]/g, '_').slice(0, 31) || 'Tier';
+        let sheetName = baseName;
+        let suffix = 2;
+        while (usedSheetNames.has(sheetName)) {
+            const tail = `_${suffix++}`;
+            sheetName = baseName.slice(0, 31 - tail.length) + tail;
+        }
+        usedSheetNames.add(sheetName);
+        const sheet = XLSX.utils.table_to_sheet(table);
+        formatExportWorksheet(sheet);
+        XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+    });
+
+    renderTableTransposed(currentTable, curated);
+    const date = new Date().toISOString().slice(0, 10);
+    const workbookName = tiers.size === 1 ? Array.from(tiers.keys())[0] : 'all_tiers';
+    const safeWorkbookName = workbookName.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
+    XLSX.writeFile(workbook, `${safeWorkbookName}_${date}.xlsx`);
+}
+
+function renderTableTransposed(cols, curated, sharedPowerCatalog, includePerformance = true) {
     if (!cols || !cols.length) { showStatus('No data found for the selected filters.'); return; }
 
     // Group columns into summary blocks by Device + config (Usable RAM) +
@@ -370,12 +483,12 @@ function renderTableTransposed(cols, curated) {
         body += `<tr class="date-row">${h}</tr>`;
     }
 
-    // File Path row = run_number (blank summary cells).
+    // File Path row uses the result path from run metadata (blank summary cells).
     {
         let h = `<td class="row-label">File Path</td>`;
         scenarioGroups.forEach((g, gi) => {
             g.cols.forEach((c, j) => {
-                h += `<td${gi > 0 && j === 0 ? ' class="grp-start"' : ''}>${escapeHtml(String(c.Iteration ?? ''))}</td>`;
+                h += `<td${gi > 0 && j === 0 ? ' class="grp-start"' : ''}>${escapeHtml(String(c.FilePath ?? ''))}</td>`;
             });
             h += blankStatCells();
         });
@@ -399,34 +512,47 @@ function renderTableTransposed(cols, curated) {
     const sectionRow = title =>
         `<tr class="section-row"><td colspan="${_totalRenderCols + 1}"><span class="section-title">${escapeHtml(title)}</span></td></tr>`;
 
-    // Power Metrics section (selectable: defaults + any added calc/rail metrics).
-    const cat = powerCatalog(cols);
-    const powerRows = activePowerRows(cat);
-    body += sectionRow('Power Metrics');
-    powerRows.forEach(pr => {
-        const get = c => (pr.src === 'calc' ? (c.PowerCalculation || {})[pr.name] : (c.PowerMetrics || {})[pr.name]);
-        body += metricRowHtml(pr.label,
-            c => {
-                const e = get(c);
-                const v = e ? e.value : null;
-                const isNA = v === null || v === undefined || v === '';
-                return { v: isNA ? 'N/A' : fmtNum(v), num: !isNA };
-            },
-            c => {
-                const e = get(c);
-                const v = e ? e.value : null;
-                return (v === null || v === undefined || v === '') ? null : [Number(v)];
-            });
-    });
+    // Keep calculated values and measured rails visually distinct.
+    const cat = sharedPowerCatalog || powerCatalog(cols);
+    const powerRows = curated ? activePowerRows(cat) : allPowerRows(cat);
+    const renderPowerRows = rows => rows.forEach(pr => {
+            const get = c => (pr.src === 'calc' ? (c.PowerCalculation || {})[pr.name] : (c.PowerMetrics || {})[pr.name]);
+            body += metricRowHtml(pr.label,
+                c => {
+                    const e = get(c);
+                    const v = e ? e.value : null;
+                    const isNA = v === null || v === undefined || v === '';
+                    return { v: isNA ? 'N/A' : fmtNum(v), num: !isNA };
+                },
+                c => {
+                    const e = get(c);
+                    const v = e ? e.value : null;
+                    return (v === null || v === undefined || v === '') ? null : [Number(v)];
+                });
+        });
+    const calculationRows = powerRows.filter(row => row.src === 'calc');
+    const railRows = powerRows.filter(row => row.src === 'rail');
+    if (calculationRows.length) {
+        body += sectionRow('Power Calculation');
+        renderPowerRows(calculationRows);
+    }
+    if (railRows.length) {
+        body += sectionRow('Power Metrics (Raw Rails)');
+        renderPowerRows(railRows);
+    }
 
-    // Performance Metrics section.
-    body += sectionRow('Performance Metrics');
-    body += curated ? curatedPerfRows(cols) : allPerfRows(cols);
+    if (includePerformance) {
+        body += sectionRow('Performance Metrics');
+        body += curated ? curatedPerfRows(cols) : allPerfRows(cols);
+    }
 
     const toolbar = curated ? powerToolbarHtml(cat) : '';
     const html = `
     <div class="table-wrapper">
-        <div class="results-summary">${activeFilterSummary()} &nbsp;|&nbsp; ${nCols} iteration(s)</div>
+        <div class="table-results-header">
+            <div class="results-summary">${activeFilterSummary()} &nbsp;|&nbsp; ${nCols} iteration(s)</div>
+            <button type="button" id="exportExcelBtn" class="btn btn-secondary export-excel-btn">Export Excel</button>
+        </div>
         ${toolbar}
         <div class="xtable-scroll">
             <table class="xtable">
@@ -436,6 +562,7 @@ function renderTableTransposed(cols, curated) {
     </div>`;
     resultsDiv.innerHTML = html;
     if (curated) wirePowerToolbar();
+    document.getElementById('exportExcelBtn').addEventListener('click', () => exportDisplayedTable(curated));
 
     // The row-label column is sticky; its width varies with the longest label.
     // Pin each device-constant value just to the right of it so the value stays
@@ -518,18 +645,6 @@ function allPerfRows(cols) {
             c => samplesFor(c, meta));
     });
 
-    // Also list all power_metrics (pm_emi_*) in the all view.
-    const pmNames = [];
-    const pmSeen = new Set();
-    cols.forEach(c => Object.keys(c.PowerMetrics).forEach(n => { if (!pmSeen.has(n)) { pmSeen.add(n); pmNames.push(n); } }));
-    if (pmNames.length) {
-        out += `<tr class="section-row"><td colspan="${_totalRenderCols + 1}"><span class="section-title">Power Metrics (raw rails)</span></td></tr>`;
-        pmNames.forEach(n => {
-            out += metricRowHtml(n,
-                c => { const e = c.PowerMetrics[n]; return { v: e ? fmtNum(e.value) : 'N/A', num: !!e }; },
-                c => { const e = c.PowerMetrics[n]; return e ? [Number(e.value)] : null; });
-        });
-    }
     return out;
 }
 

@@ -24,6 +24,19 @@ from datetime import date
 from pathlib import Path
 
 import config
+from device_names import canonical_device_name, uses_raw_rails_only
+from power_calculations import (
+    apply_battery_life,
+    apply_heracles_component_power,
+    apply_heracles_power,
+    apply_minos_power,
+    apply_purwa_display_power,
+    apply_purwa_rop,
+    is_display_power_metric,
+    is_rop_metric,
+    is_soc_power_metric,
+    is_system_power_metric,
+)
 
 
 def _json_dir() -> str:
@@ -93,7 +106,8 @@ def _load_records() -> list[dict]:
         run_info = data.get("run_info") or {}
         device_config = data.get("device_config") or {}
 
-        device_name = str(device_config.get("device_name", ""))
+        raw_device_name = str(device_config.get("device_name", ""))
+        device_name = canonical_device_name(raw_device_name, device_config.get("cpu_mfg"))
         usable_ram = device_config.get("usable_ram_config_gb", "")
         test_name = run_info.get("test_name") or run_info.get("scenario") or ""
 
@@ -114,6 +128,8 @@ def _load_records() -> list[dict]:
         seen: set = set()
 
         def add(name: str, metric_type: str, raw_value, unit: str, pt: str):
+            if uses_raw_rails_only(device_name) and metric_type == "PowerCalculation":
+                return
             normalized = _normalize_name(name)
             value = _to_number(raw_value)
             if not normalized or value is None:
@@ -142,7 +158,15 @@ def _load_records() -> list[dict]:
                 }
             )
 
-        for metric in data.get("power_metrics") or []:
+        power_metrics = data.get("power_metrics") or []
+        power_metric_map = {
+            _normalize_name(metric.get("name")): {
+                "value": _to_number(metric.get("value")),
+                "unit": metric.get("unit") or "N/A",
+            }
+            for metric in power_metrics
+        }
+        for metric in power_metrics:
             add(
                 metric.get("name"),
                 "PowerMetrics",
@@ -151,14 +175,82 @@ def _load_records() -> list[dict]:
                 "N/A",
             )
 
-        for metric in data.get("power_calculation") or []:
+        calculation_metrics = [] if uses_raw_rails_only(device_name) else (
+            data.get("power_calculation") or []
+        )
+        calculation_map = {
+            _normalize_name(metric.get("name")): {
+                "value": _to_number(metric.get("value")),
+                "unit": metric.get("unit") or "N/A",
+            }
+            for metric in calculation_metrics
+        }
+        display_corrected = apply_purwa_display_power(
+            calculation_map,
+            power_metric_map,
+            raw_device_name,
+            device_config.get("dut_type"),
+        )
+        rop_corrected = apply_purwa_rop(
+            calculation_map,
+            raw_device_name,
+            device_config.get("dut_type"),
+        )
+        corrected_names = apply_heracles_component_power(
+            calculation_map,
+            power_metric_map,
+            raw_device_name,
+            device_name,
+            device_config.get("dut_type"),
+        )
+        soc_corrected, system_corrected = apply_heracles_power(
+            calculation_map,
+            power_metric_map,
+            raw_device_name,
+            device_name,
+            device_config.get("dut_type"),
+        )
+        corrected_names.update(apply_minos_power(
+            calculation_map,
+            power_metric_map,
+            raw_device_name,
+            device_name,
+            device_config.get("cpu_mfg"),
+            device_config.get("dut_type"),
+        ))
+        if soc_corrected:
+            corrected_names.update(
+                name for name in calculation_map if is_soc_power_metric(name)
+            )
+        if system_corrected:
+            corrected_names.update(
+                name for name in calculation_map if is_system_power_metric(name)
+            )
+        battery_life_name = apply_battery_life(
+            calculation_map, device_config.get("battery_capacity_wh")
+        )
+        if battery_life_name:
+            corrected_names.add(battery_life_name)
+        original_calculation_names = {
+            _normalize_name(metric.get("name")) for metric in calculation_metrics
+        }
+        for metric in calculation_metrics:
+            name = _normalize_name(metric.get("name"))
+            corrected = calculation_map.get(name) if (
+                (display_corrected and is_display_power_metric(name))
+                or (rop_corrected and is_rop_metric(name))
+                or name in corrected_names
+            ) else None
             add(
-                metric.get("name"),
+                name,
                 "PowerCalculation",
-                metric.get("value"),
-                metric.get("unit") or "N/A",
+                corrected["value"] if corrected else metric.get("value"),
+                corrected["unit"] if corrected else metric.get("unit") or "N/A",
                 "N/A",
             )
+        for name in corrected_names - original_calculation_names:
+            entry = calculation_map[name]
+            add(name, "PowerCalculation", entry["value"], entry["unit"], "N/A")
 
         for metric in data.get("perf_metrics") or []:
             add(
@@ -375,19 +467,24 @@ def _load_columns() -> list[dict]:
         run_info = data.get("run_info") or {}
         device_config = data.get("device_config") or {}
 
-        device_name = str(device_config.get("device_name", ""))
+        raw_device_name = str(device_config.get("device_name", ""))
+        device_name = canonical_device_name(raw_device_name, device_config.get("cpu_mfg"))
         usable_ram = device_config.get("usable_ram_config_gb", "")
         test_name = run_info.get("test_name") or run_info.get("scenario") or ""
         scenario = run_info.get("scenario") or test_name or ""
 
         header = {label: device_config.get(key, "") for label, key in _HEADER_FIELDS}
+        header["Device name"] = device_name
         # Host Name is per-run (varies across iterations), sourced from run_info.
         header["Host Name"] = run_info.get("HostName") or run_info.get("hostname") or ""
 
         # Power Metrics (from power_calculation), plus the full calculation/metric
         # maps for the "all metrics" view.
         calc_map, pm_map = {}, {}
-        for m in data.get("power_calculation") or []:
+        calculation_metrics = [] if uses_raw_rails_only(device_name) else (
+            data.get("power_calculation") or []
+        )
+        for m in calculation_metrics:
             calc_map[_normalize_name(m.get("name"))] = {
                 "value": _to_number(m.get("value")),
                 "unit": m.get("unit") or "",
@@ -397,6 +494,32 @@ def _load_columns() -> list[dict]:
                 "value": _to_number(m.get("value")),
                 "unit": m.get("unit") or "",
             }
+        if not uses_raw_rails_only(device_name):
+            apply_purwa_display_power(calc_map, pm_map, raw_device_name, device_config.get("dut_type"))
+            apply_purwa_rop(calc_map, raw_device_name, device_config.get("dut_type"))
+            apply_heracles_component_power(
+                calc_map,
+                pm_map,
+                raw_device_name,
+                device_name,
+                device_config.get("dut_type"),
+            )
+            apply_heracles_power(
+                calc_map,
+                pm_map,
+                raw_device_name,
+                device_name,
+                device_config.get("dut_type"),
+            )
+            apply_minos_power(
+                calc_map,
+                pm_map,
+                raw_device_name,
+                device_name,
+                device_config.get("cpu_mfg"),
+                device_config.get("dut_type"),
+            )
+            apply_battery_life(calc_map, device_config.get("battery_capacity_wh"))
         power = {}
         for label, name in _POWER_FIELDS:
             entry = calc_map.get(name)

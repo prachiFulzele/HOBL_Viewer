@@ -12,7 +12,7 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 #
 # Both backends expose the SAME query surface and schema, so switching sources
 # is a one-line change here once the branch is merged.
-DATA_SOURCE = "json"
+DATA_SOURCE = "kusto"
 
 # In JSON mode, the dashboard reads ONLY from files the user uploads through the
 # UI. They are stored in this folder; when it is empty, no data is shown.
