@@ -1,7 +1,7 @@
 // ── Percentile Distribution view ────────────────────────────────────────────
 //
-// X axis = percentile (0–100), Y axis = the metric's value. For a single
-// scenario, every Device + RAM config is overlaid as its own colored line: the
+// X axis = percentile (0–100), Y axis = the metric's value. Every Device + RAM
+// + Scenario combination is overlaid as its own colored line: the
 // metric's values across the selected iterations ("Last N Iterations") are
 // sorted ascending and spread across the percentile axis (rank i of n maps to
 // percentile i/(n-1)*100). P50/P70/P90 are interpolated and annotated.
@@ -19,18 +19,18 @@
 const PCT_TYPE_LABEL = { perf: 'Perf Metrics', calc: 'Power Calculation', rail: 'Power Metrics' };
 const PCT_TYPE_ORDER = ['perf', 'calc', 'rail'];
 
-// Distinct colors per Device + RAM config combo (so 8 GB and 16 GB of the same
-// device are clearly different colors, each with its own line).
+// Distinct colors per Device + RAM + Scenario combination.
 const COMBO_COLORS = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
     '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#393b79', '#637939', '#8c6d31'];
 let pctComboColorMap = {};
 function buildComboColorMap(rows) {
-    const combos = Array.from(new Set(rows.map(r => r.Device + '\u0001' + r.Ram))).sort();
+    const combos = Array.from(new Set(rows.map(r =>
+        r.Device + '\u0001' + r.Ram + '\u0001' + r.Scenario))).sort();
     pctComboColorMap = {};
     combos.forEach((c, i) => { pctComboColorMap[c] = COMBO_COLORS[i % COMBO_COLORS.length]; });
 }
-function colorForCombo(device, ram) {
-    return pctComboColorMap[device + '\u0001' + ram] || COMBO_COLORS[0];
+function colorForCombo(device, ram, scenario) {
+    return pctComboColorMap[device + '\u0001' + ram + '\u0001' + scenario] || COMBO_COLORS[0];
 }
 
 // Group rows by metric name, keeping a name list (first-seen, optionally sorted).
@@ -45,26 +45,24 @@ function pctGroupByName(rows, sortNames) {
 }
 
 function renderPercentile(metrics) {
-    // The percentile view describes ONE scenario at a time (overlaying every
-    // device / RAM config). Bail out if the fetched data spans multiple.
     const scenarios = Array.from(new Set(metrics.map(m => m.Scenario)));
-    if (scenarios.length > 1) {
+    const devices = Array.from(new Set(metrics.map(m => m.Device)));
+    if (scenarios.length > 1 && devices.length > 1) {
         resultsDiv.innerHTML =
             `<div class="results-summary">${activeFilterSummary()} &nbsp;|&nbsp; ${metrics.length} metric(s)</div>` +
-            `<div class="chart-note">The Percentile Distribution view shows one scenario at a time. ` +
-            `Please select a single <strong>Scenario</strong> and click <strong>Apply</strong> ` +
-            `(currently ${scenarios.length} scenarios match).</div>`;
+            `<div class="chart-note">To compare multiple scenarios in the Percentile Distribution view, ` +
+            `select a single <strong>Device</strong>. Otherwise, select a single <strong>Scenario</strong> ` +
+            `and click <strong>Apply</strong>.</div>`;
         return;
     }
-    const scen = scenarios[0];
 
-    // Build the three metric-type groups for this scenario. Perf uses the curated
+    // Build the three metric-type groups. Perf uses the curated
     // first / P50-P70-P90 rows (same as the Table view); calc + rails pass through.
     const perfRows = (typeof curatedPerfMetricRows === 'function' && currentTable)
-        ? curatedPerfMetricRows(currentTable).filter(r => r.Scenario === scen)
+        ? curatedPerfMetricRows(currentTable).filter(r => scenarios.includes(r.Scenario))
         : [];
-    const calcRows = metrics.filter(m => m.MetricType === 'PowerCalculation' && m.Scenario === scen);
-    const railRows = metrics.filter(m => m.MetricType === 'PowerMetrics' && m.Scenario === scen);
+    const calcRows = metrics.filter(m => m.MetricType === 'PowerCalculation');
+    const railRows = metrics.filter(m => m.MetricType === 'PowerMetrics');
 
     const groups = {
         perf: pctGroupByName(perfRows, false),
@@ -123,7 +121,7 @@ function renderPercentile(metrics) {
         <div class="results-summary">${activeFilterSummary()} &nbsp;|&nbsp; ${metrics.length} metric(s)</div>
         <div class="chart-card">
             <div class="pct-controls pct-controls-multi">${ddHtml}</div>
-            <div class="pct-sub">Values across the selected iterations, sorted and spread over the 0\u2013100 percentile axis. Each Device / RAM config is a separate colored line. Click a dropdown's circle to make it active (it starts with <strong>all</strong> its metrics shown); then check or uncheck metrics to stack exactly the charts you want. Set <strong>Last N Iterations</strong> to choose how many recent iterations to include.</div>
+            <div class="pct-sub">Values across the selected iterations, sorted and spread over the 0\u2013100 percentile axis. Each Device / RAM / Scenario combination is a separate colored line. Click a dropdown's circle to make it active (it starts with <strong>all</strong> its metrics shown); then check or uncheck metrics to stack exactly the charts you want. Set <strong>Last N Iterations</strong> to choose how many recent iterations to include.</div>
             <div id="pctChartsArea"></div>
         </div>`;
 
@@ -255,16 +253,19 @@ function drawPercentileChart(rows, chartEl, statsEl) {
     const unit = rows[0].Unit && rows[0].Unit !== 'N/A' ? rows[0].Unit : '';
     const unitSuffix = unit ? ' ' + unit : '';
 
-    // One series per Device + RAM config, each its own distinct color.
+    // One series per Device + RAM + Scenario combination.
     const series = {};
     rows.forEach(r => {
-        const key = r.Device + '\u0001' + r.Ram;
-        (series[key] = series[key] || { device: r.Device, ram: r.Ram, values: [] }).values.push(Number(r.Value));
+        const key = r.Device + '\u0001' + r.Ram + '\u0001' + r.Scenario;
+        (series[key] = series[key] || {
+            device: r.Device, ram: r.Ram, scenario: r.Scenario, values: []
+        }).values.push(Number(r.Value));
     });
     const keys = Object.keys(series);
 
     // Only show RAM in the legend if configs actually differ.
     const showRam = Array.from(new Set(rows.map(r => r.Ram))).length > 1;
+    const showScenario = Array.from(new Set(rows.map(r => r.Scenario))).length > 1;
 
     const traces = [];
     const drawn = [];   // retains per-series {name, color, values} for P50/P70/P90 markers
@@ -273,8 +274,10 @@ function drawPercentileChart(rows, chartEl, statsEl) {
         const values = s.values.filter(Number.isFinite).sort((a, b) => a - b);
         if (!values.length) return;
         const n = values.length;
-        const color = colorForCombo(s.device, s.ram);
-        const name = s.device + (showRam ? ` (${s.ram} GB)` : '');
+        const color = colorForCombo(s.device, s.ram, s.scenario);
+        const name = showScenario
+            ? s.scenario + (showRam ? ` (${s.ram} GB)` : '')
+            : s.device + (showRam ? ` (${s.ram} GB)` : '');
         // With a single sample the distribution is degenerate (every percentile
         // equals that value), so draw a flat line spanning the whole axis rather
         // than a lone point. Otherwise spread the sorted values across 0–100.
@@ -393,7 +396,7 @@ function drawPercentileChart(rows, chartEl, statsEl) {
         statsEl.innerHTML = `
             <table class="pct-stats-table">
                 <thead><tr>
-                    <th>Device / Config</th><th>P50</th><th>P70</th><th>P90</th><th>Delta (P90−P50)</th>
+                    <th>${showScenario ? 'Scenario / Config' : 'Device / Config'}</th><th>P50</th><th>P70</th><th>P90</th><th>Delta (P90−P50)</th>
                 </tr></thead>
                 <tbody>${rowsHtml}</tbody>
             </table>`;

@@ -1,0 +1,73 @@
+<section id="regressionView" hidden aria-label="Build Regression">
+    <div class="review-intro">
+        <h2>P50 changes between consecutive builds</h2>
+        <p>Fix one device, RAM configuration, and scenario. Metrics shown in Table (Specified) are selected by default; open the metric picker to add or remove metrics. Builds are compared in numeric build-number order, each against the preceding included build.</p>
+    </div>
+    <form class="filters review-filters" id="regressionForm">
+        <div class="filter-group">
+            <label for="regDevice">Device</label>
+            <select id="regDevice" required disabled></select>
+        </div>
+        <div class="filter-group">
+            <label for="regRam">RAM configuration</label>
+            <select id="regRam" required disabled></select>
+        </div>
+        <div class="filter-group">
+            <label for="regScenario">Scenario</label>
+            <select id="regScenario" required disabled></select>
+        </div>
+        <div class="filter-group">
+            <label for="regBuildToggle">Builds</label>
+            <div class="regression-metric-picker">
+                <button type="button" id="regBuildToggle" class="power-btn" disabled>
+                    Choose builds
+                </button>
+                <div id="regBuildPanel" class="power-panel regression-metric-panel" hidden>
+                    <div class="regression-metric-actions">
+                        <button type="button" id="regBuildAll">Select all</button>
+                        <button type="button" id="regBuildClear">Clear</button>
+                    </div>
+                    <div id="regBuildOptions"></div>
+                </div>
+            </div>
+        </div>
+        <div class="filter-group">
+            <label for="regMetricToggle">Metrics</label>
+            <div class="regression-metric-picker">
+                <button type="button" id="regMetricToggle" class="power-btn" disabled>
+                    Choose metrics
+                </button>
+                <div id="regMetricPanel" class="power-panel regression-metric-panel" hidden>
+                    <div class="regression-metric-actions">
+                        <button type="button" id="regMetricSpecified">Specified table</button>
+                        <button type="button" id="regMetricAll">Select all</button>
+                        <button type="button" id="regMetricClear">Clear</button>
+                    </div>
+                    <div id="regMetricOptions"></div>
+                </div>
+            </div>
+        </div>
+        <div class="filter-group">
+            <label for="regDirection">Better values</label>
+            <select id="regDirection" required>
+                <option value="lower">Lower is better (power / latency)</option>
+                <option value="higher">Higher is better (battery life / FPS)</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label class="regression-iteration-toggle">
+                <input type="checkbox" id="regExcludeUnder8">
+                Exclude builds with fewer than 8 iterations
+            </label>
+            <small>Counts iterations containing valid samples for each selected metric. Applies only to Build Regression.</small>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary" id="regApply" disabled>Compare Builds</button>
+            <button type="button" class="btn btn-secondary" id="regReload">Reload Filters</button>
+        </div>
+    </form>
+    <p class="chart-note">P50 is the median of all finite samples for each selected metric in each build, across all hosts, dates, and iterations. Metrics with different units or Perftrack IDs are kept separate. Percentage change = (current P50 - previous P50) / |previous P50| &times; 100. Any worsening is labeled a regression; this is not a statistical-significance test. A zero previous P50 has no percentage change.</p>
+    <div id="regressionResults" aria-live="polite">
+        <div class="status">Select filters to compare builds.</div>
+    </div>
+</section>

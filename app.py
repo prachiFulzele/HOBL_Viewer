@@ -20,6 +20,7 @@ from werkzeug.utils import secure_filename
 
 import config
 import json_data
+from regression import build_options, compare_builds, metric_options
 
 # Kusto is optional: importing it may fail if the SDK isn't installed yet. The
 # dashboard still works (in JSON mode) when it's unavailable.
@@ -143,6 +144,93 @@ def ai_page():
     return render_template("ai.html")
 
 
+@app.route("/review")
+def review_page():
+    """Kusto upload summary by device, scenario, and date range."""
+    return render_template("review.html")
+
+
+@app.route("/api/regression")
+def api_regression():
+    """Cascading options and adjacent-build P50 comparisons."""
+    filters = {}
+    for name in ("device", "ram", "scenario", "direction", "exclude_under_8"):
+        values = request.args.getlist(name)
+        if len(values) > 1:
+            return jsonify({"error": f"Select only one {name}."}), 400
+        filters[name] = values[0] if values else ""
+    metrics = list(dict.fromkeys(request.args.getlist("metric")))
+    builds = list(dict.fromkeys(request.args.getlist("build")))
+    if not filters["device"]:
+        return jsonify({"error": "Select one device."}), 400
+    if filters["exclude_under_8"] not in ("", "0", "1"):
+        return jsonify({"error": "exclude_under_8 must be '0' or '1'."}), 400
+    if metrics and not all(filters[name] for name in ("ram", "scenario", "direction")):
+        return jsonify({
+            "error": "Select one RAM configuration, scenario, one or more metrics, and direction."
+        }), 400
+    try:
+        columns = get_backend().get_table_data(
+            device=filters["device"], ram=filters["ram"], scenario=filters["scenario"],
+        )
+        options = metric_options(columns)
+        available_builds = build_options(columns)
+        data = {
+            "rams": sorted({str(column["Ram"]) for column in columns if column["Ram"] != ""}),
+            "scenarios": sorted({column["Scenario"] for column in columns if column["Scenario"]}),
+            "metrics": options,
+            "builds": available_builds,
+        }
+        if metrics:
+            option_by_value = {option["value"]: option for option in options}
+            unknown_builds = set(builds) - set(available_builds)
+            if unknown_builds:
+                raise ValueError(
+                    "Select builds available for this device, RAM, and scenario."
+                )
+            comparisons = []
+            for metric in metrics:
+                if metric not in option_by_value:
+                    raise ValueError(
+                        "Select metrics available for this device, RAM, and scenario."
+                    )
+                comparison = {
+                    "metric": option_by_value[metric],
+                    **compare_builds(
+                        columns, metric, filters["direction"],
+                        exclude_under_8=filters["exclude_under_8"] == "1",
+                        included_builds=builds or None,
+                    ),
+                }
+                comparisons.append(comparison)
+            data["comparisons"] = comparisons
+            if len(comparisons) == 1:
+                data.update({
+                    key: value for key, value in comparisons[0].items() if key != "metric"
+                })
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@app.route("/api/review-summary")
+def api_review_summary():
+    """Return Kusto iteration counts grouped by device and scenario."""
+    if kusto_data is None:
+        return jsonify({"error": "Kusto backend is not available."}), 503
+    try:
+        return jsonify(kusto_data.get_review_summary(
+            request.args.get("start_date", ""),
+            request.args.get("end_date", ""),
+        ))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 @app.route("/api/ai/analyze", methods=["POST"])
 def api_ai_analyze():
     """Run a natural-language analysis against the active data source.
@@ -192,6 +280,7 @@ def _parse_filters():
         "ram": _list("ram"),
         "scenario": _list("scenario"),
         "host": _list("host"),
+        "build": _list("build"),
         "start_date": request.args.get("start_date", ""),
         "end_date": request.args.get("end_date", ""),
         "last_n": _int("last_n"),
@@ -209,6 +298,7 @@ def api_metrics():
             get_backend().get_metrics(
                 f["device"], f["ram"], f["scenario"], f["host"], f["start_date"],
                 f["end_date"], f["last_n"], f["start_iter"], f["end_iter"],
+                build=f["build"],
             )
         )
     except Exception as exc:
@@ -224,6 +314,7 @@ def api_table():
             get_backend().get_table_data(
                 f["device"], f["ram"], f["scenario"], f["host"], f["start_date"],
                 f["end_date"], f["last_n"], f["start_iter"], f["end_iter"],
+                build=f["build"],
             )
         )
     except Exception as exc:

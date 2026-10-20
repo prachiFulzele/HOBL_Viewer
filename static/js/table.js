@@ -617,29 +617,32 @@ function curatedPerfRows(cols) {
 
 // All-metrics perf rows: every metric, all sample values listed per column.
 function allPerfRows(cols) {
-    // Union of all perf identities across columns. Key by pt when present,
-    // else by name. Keep a friendly display name.
+    // Raw identities stay separate even when curated metrics share a PT ID.
     const order = [];
     const seen = new Map();
+    const columnSamples = new Map();
     cols.forEach(c => {
+        const samples = new Map();
         c.PerfAll.forEach(p => {
-            const key = (p.pt !== null && p.pt !== undefined) ? 'pt:' + p.pt : 'nm:' + p.name;
+            const name = p.raw_name ?? p.name;
+            const key = JSON.stringify([name, p.pt ?? null, p.unit || '']);
             if (!seen.has(key)) {
-                seen.set(key, { key, pt: p.pt, name: p.name });
+                seen.set(key, { key, pt: p.pt, name, unit: p.unit });
                 order.push(key);
             }
+            if (!samples.has(key)) samples.set(key, []);
+            samples.get(key).push(p.value);
         });
+        columnSamples.set(c, samples);
     });
 
-    const samplesFor = (c, meta) => {
-        if (meta.pt != null) return c.PerfByPt[meta.pt] || null;
-        return (c.PerfByName[meta.name] !== undefined) ? [c.PerfByName[meta.name]] : null;
-    };
+    const samplesFor = (c, meta) => columnSamples.get(c).get(meta.key) || null;
 
     let out = '';
     order.forEach(key => {
         const meta = seen.get(key);
-        const label = meta.name + (meta.pt != null ? ` (pt ${meta.pt})` : '');
+        const label = meta.name + (meta.pt != null ? ` (pt ${meta.pt})` : '') +
+            (meta.unit ? ` (${meta.unit})` : '');
         out += metricRowHtml(label,
             c => { const v = samplesFor(c, meta); return { v: (v && v.length) ? v.map(fmtNum).join(', ') : 'N/A', num: !!(v && v.length) }; },
             c => samplesFor(c, meta));

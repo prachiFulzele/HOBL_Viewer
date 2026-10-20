@@ -24,6 +24,7 @@ from datetime import date
 from pathlib import Path
 
 import config
+from ram_config import repair_json_ram
 from device_names import canonical_device_name, uses_raw_rails_only
 from power_calculations import (
     apply_battery_life,
@@ -88,21 +89,24 @@ def _to_number(raw):
     return int(value) if value.is_integer() else value
 
 
-def _load_records() -> list[dict]:
-    """Load every JSON file in the active JSON folder into a flat list of metric
-    rows, one row per metric, shaped like a Hobl_RawMetrics record."""
-    records: list[dict] = []
+def _load_documents() -> list[dict]:
     folder = Path(_json_dir())
     if not folder.is_dir():
-        return records
-
+        return []
+    documents = []
     for path in sorted(folder.glob("*.json")):
         try:
             with open(path, encoding="utf-8-sig") as handle:
-                data = json.load(handle)
+                documents.append(json.load(handle))
         except (OSError, ValueError):
             continue
+    return repair_json_ram(documents)
 
+
+def _load_records() -> list[dict]:
+    """Load every JSON file into flat metric rows with repaired usable RAM."""
+    records: list[dict] = []
+    for data in _load_documents():
         run_info = data.get("run_info") or {}
         device_config = data.get("device_config") or {}
 
@@ -120,6 +124,7 @@ def _load_records() -> list[dict]:
             or "Unknown"
         )
         host_name = run_info.get("HostName") or run_info.get("hostname") or ""
+        build_number = device_config.get("os_build") or ""
         iteration = run_info.get("run_number")
         device_config_json = json.dumps(device_config, separators=(",", ":"))
 
@@ -154,6 +159,7 @@ def _load_records() -> list[dict]:
                     "StudyType": study_type,
                     "Pt": pt,
                     "HostName": host_name,
+                    "BuildNumber": str(build_number),
                     "DeviceConfig": device_config_json,
                 }
             )
@@ -287,6 +293,7 @@ def get_filter_options() -> dict:
         "rams": sorted({r["Ram"] for r in records if r["Ram"]}, key=_ram_sort_key),
         "scenarios": sorted({r["Scenario"] for r in records if r["Scenario"]}),
         "hostnames": sorted({r["HostName"] for r in records if r.get("HostName")}),
+        "builds": sorted({r["BuildNumber"] for r in records if r.get("BuildNumber")}),
         "dates": sorted({r["RunDate"] for r in records if r["RunDate"]}, reverse=True),
     }
 
@@ -364,6 +371,7 @@ def get_metrics(
     last_n=None,
     start_iter=None,
     end_iter=None,
+    build: str = "",
 ) -> list[dict]:
     """Metrics matching the provided filters. Any empty filter means "all".
 
@@ -379,6 +387,7 @@ def get_metrics(
     ram_set = _as_set(ram)
     scn_set = _as_set(scenario)
     host_set = _as_set(host)
+    build_set = _as_set(build)
     rows = [
         r
         for r in _load_records()
@@ -386,6 +395,7 @@ def get_metrics(
         and (not ram_set or r["Ram"] in ram_set)
         and (not scn_set or r["Scenario"] in scn_set)
         and (not host_set or r.get("HostName") in host_set)
+        and (not build_set or r.get("BuildNumber") in build_set)
         and (not start_date or r["RunDate"] >= start_date)
         and (not end_date or r["RunDate"] <= end_date)
     ]
@@ -453,17 +463,7 @@ _POWER_FIELDS = [
 def _load_columns() -> list[dict]:
     """Load each JSON file as one iteration "column" for the transposed table."""
     columns: list[dict] = []
-    folder = Path(_json_dir())
-    if not folder.is_dir():
-        return columns
-
-    for path in sorted(folder.glob("*.json")):
-        try:
-            with open(path, encoding="utf-8-sig") as handle:
-                data = json.load(handle)
-        except (OSError, ValueError):
-            continue
-
+    for data in _load_documents():
         run_info = data.get("run_info") or {}
         device_config = data.get("device_config") or {}
 
@@ -586,6 +586,7 @@ def get_table_data(
     last_n=None,
     start_iter=None,
     end_iter=None,
+    build: str = "",
 ) -> list[dict]:
     """Iteration columns matching the filters, for the transposed table view.
 
@@ -598,6 +599,7 @@ def get_table_data(
     ram_set = _as_set(ram)
     scn_set = _as_set(scenario)
     host_set = _as_set(host)
+    build_set = _as_set(build)
     cols = [
         c
         for c in _load_columns()
@@ -605,6 +607,7 @@ def get_table_data(
         and (not ram_set or c["Ram"] in ram_set)
         and (not scn_set or c["Scenario"] in scn_set)
         and (not host_set or c["Header"].get("Host Name") in host_set)
+        and (not build_set or str(c["Header"].get("OS Build", "")) in build_set)
         and (not start_date or c["Date"] >= start_date)
         and (not end_date or c["Date"] <= end_date)
     ]

@@ -90,6 +90,31 @@ regardless of the active source.
 
 ## Data sources (JSON vs Kusto)
 
+### Missing usable RAM in build 26708.1000
+
+The viewer repairs **only missing** usable RAM for build `26708.1000` at read
+time, before filtering or grouping. Existing non-empty values and other builds
+are unchanged. The explicit device mappings are:
+
+| Device | Usable RAM |
+|---|---|
+| ROM-MS-IDC-25 | 16 GB |
+| QC-LAM-PURWA-01 | 16 GB |
+| QC-LAM-PURWA-03 | 8 GB |
+| ITL-PTL-MAA-07 | 32 GB |
+| LEN-WCL-FUN-01 | 8 GB |
+
+For other devices, missing values use the most frequent original non-empty
+usable RAM among strictly earlier iterations of the same canonical device in
+this build only. Equal counts use the most recently observed RAM. Each result
+counts once regardless of its number of metric samples; inferred values never
+become evidence for later repairs. Kusto uses run timestamps (`RunDate`, falling
+back to `BuildDate`); JSON uses `run_info.run_number`, since its upload date is
+not the original run time. Without earlier evidence (or a usable ordering value),
+RAM stays missing. Corrections apply consistently across filters, metrics,
+table headers, AI analysis data, and regression comparisons. Source records and
+uploaded files are not modified.
+
 Switch the active source at runtime from the **top-right control** in the UI. The choice is
 persisted to `runtime_state.json` and survives restarts.
 
@@ -116,8 +141,75 @@ selected runs, backed by shared filter logic in [static/js/common.js](static/js/
 | **Box & Whisker** | [static/js/box.js](static/js/box.js) | Distribution of a metric across iterations |
 | **Percentile** | [static/js/percentile.js](static/js/percentile.js) | Percentile breakdown (P50/P70/P90, …) |
 
+**Table (All Metrics)** preserves each original Kusto performance metric name,
+including workload/R1 prefixes and sample suffixes. Names sharing a Perftrack ID
+are shown as separate rows, with their own values and units, in the table and
+its Excel export. **Table (Specified)** and curated plots continue grouping by
+their mapped Perftrack IDs. Filters, missing metadata joins, and non-numeric
+values can still affect which results are available.
+
 **Filters** (all optional; an omitted filter means "all"): `device`, `ram`, `scenario`, `host`,
-`start_date`, `end_date`, `last_n` (most recent N runs by run date), `start_iter`, `end_iter`.
+`build`, `start_date`, `end_date`, `last_n` (most recent N runs by run date), `start_iter`,
+`end_iter`.
+
+### Build regression
+
+Select **Build Regression** in the dashboard's **View** dropdown (on `/`). Choose exactly
+one device, RAM configuration, and scenario using the cascading dropdowns. Every available
+metric shown by **Table (Specified)** is selected and compared automatically. Open the metric
+picker to remove individual metrics, restore the specified-table selection, select every
+available metric, or clear the selection. Select **Lower is better** for power/latency or
+**Higher is better** for battery life/FPS, then click **Compare Builds** after changing the
+metric selection or comparison direction.
+
+All available builds are also selected by default. Open the build picker to exclude individual
+builds, select all builds again, or clear the selection. Comparisons are recalculated between
+the remaining builds, so the previous-build column always refers to the preceding included
+build.
+
+Optionally check **Exclude builds with fewer than 8 iterations**, then click
+**Compare Builds** again. This affects only the regression graph and table:
+all other views and source data keep every build. The count is the number of
+iterations containing at least one finite sample of each selected metric, not
+the number of metric samples. Builds with exactly 8 iterations remain included.
+Comparisons are recalculated against the previous remaining build, and the view
+reports how many builds were excluded. The option is off by default.
+
+The page uses the active JSON or Kusto source and compares all available builds
+in numeric build-number order, each against its immediate predecessor. P50 is the
+median of each selected metric's finite samples across all hosts, dates, and
+iterations within a build (performance samples are pooled, not medians of
+iteration medians). Metric type, name, Perftrack ID, and unit identify a metric
+so incompatible measurements are never pooled.
+
+Results include P50, sample/iteration counts, signed absolute and percentage
+changes, and regression/improvement status. A line-and-marker graph above the
+table plots each build's P50, with builds in numeric order and the metric's unit
+on the Y-axis. Markers highlight regressions (red), improvements (green), the
+baseline (blue), and unchanged/not-comparable values (gray). Hover for counts and
+build-to-build changes; missing samples leave gaps rather than joining across
+missing builds. The graph supports zooming and image download.
+Percentage change uses the absolute
+previous P50 as its denominator; a zero previous P50 displays `N/A`.
+Any worsening is labeled a regression, without a significance threshold or claim
+of statistical significance. Builds missing the chosen metric stay visible and
+are not skipped when determining the preceding build. Iterations without build
+numbers and invalid samples are excluded with an explicit count.
+
+The regular dashboard filters are hidden in this view; its dedicated single-select
+filters apply instead. Switching back restores the regular filters and previously
+loaded viewer data. Change/upload the data source using the shared header control;
+applying a source change clears the regression selections. **Reload Filters** also
+refreshes available devices. There is no standalone regression page.
+`GET /api/regression` provides cascading options for a required
+`device` and optional single-valued `ram`/`scenario`. Supplying one or more repeated
+`metric` parameters (opaque keys from the returned options) requires `ram`, `scenario`,
+and a `direction` of `lower` or `higher`, and adds one adjacent-build comparison result
+per metric to the response. Optional repeated `build` parameters restrict every comparison
+to those builds; omitting them includes all builds. A single metric also retains the original
+top-level row fields.
+The optional `exclude_under_8=1` enables the regression-only iteration filter;
+omitting it or passing `0` includes all builds.
 
 ---
 

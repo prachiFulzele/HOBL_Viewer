@@ -43,6 +43,7 @@ from azure.identity import InteractiveBrowserCredential
 from azure.kusto.data import KustoClient, KustoConnectionStringBuilder
 
 import config
+from ram_config import RAM_REPAIR_BUILD, ram_override_kql
 from device_names import canonical_device_kql, uses_raw_rails_only
 from power_calculations import (
     apply_battery_life,
@@ -232,14 +233,47 @@ def _meta_let() -> str:
     )
 
 
+def _ram_repair_let() -> str:
+    """Count each earlier result once, independently of metric/filter counts."""
+    return (
+        "let _ram_meta = _meta\n"
+        f"| extend _RamDevice = {canonical_device_kql()}\n"
+        f"| extend M_Ram = {ram_override_kql('_RamDevice', 'M_Ram', 'M_OSBuild')};\n"
+        f"let _ram_times = {config.KUSTO_TABLE}\n"
+        "| extend TRID = tostring(TestResultId)\n"
+        "| summarize _RamTime = min(coalesce(RunDate, BuildDate)) by TRID;\n"
+        "let _ram_original = _meta\n"
+        f"| where M_OSBuild == '{RAM_REPAIR_BUILD}'\n"
+        f"| extend _RamDevice = {canonical_device_kql()}\n"
+        "| join kind=inner (_ram_times) on TRID;\n"
+        "let _ram_history = _ram_original\n"
+        "| where isnotempty(trim(@'\\s+', M_Ram))\n"
+        "| project _RamDevice, _HistoryRam = M_Ram, _HistoryTime = _RamTime;\n"
+        "let _ram_fallback = _ram_original\n"
+        "| where isempty(trim(@'\\s+', M_Ram))\n"
+        "| join kind=inner (_ram_history) on _RamDevice\n"
+        "| where _HistoryTime < _RamTime\n"
+        "| summarize _RamCount = count(), _RamLatest = max(_HistoryTime) by TRID, _HistoryRam\n"
+        "| sort by TRID asc, _RamCount desc, _RamLatest desc, _HistoryRam asc\n"
+        "| serialize _RamRank = row_number(1, prev(TRID) != TRID)\n"
+        "| where _RamRank == 1\n"
+        "| project TRID, _FallbackRam = _HistoryRam;\n"
+        "let _ram_resolved = _ram_meta\n"
+        "| join kind=leftouter (_ram_fallback) on TRID\n"
+        "| extend M_Ram = iff(isempty(trim(@'\\s+', M_Ram)) and isnotempty(_FallbackRam), "
+        "_FallbackRam, M_Ram);\n"
+    )
+
+
 def _joined(filter_clauses: list[str]) -> str:
     """Base query: metrics joined to metadata, with Device/Ram/Scenario/Date
     derived and the given filter clauses applied."""
     base = (
         _meta_let()
+        + _ram_repair_let()
         + f"{config.KUSTO_TABLE}\n"
         "| extend TRID = tostring(TestResultId)\n"
-        "| join kind=inner (_meta) on TRID\n"
+        "| join kind=inner (_ram_resolved) on TRID\n"
         f"| extend Device = {canonical_device_kql()}, Ram = M_Ram, Host = M_Host\n"
         "| extend Tier = iif(isnotempty(M_Tier), M_Tier, TierDisplayName)\n"
         "| extend _prefix = strcat(Device, '_', Ram, '_')\n"
@@ -257,9 +291,15 @@ def _joined(filter_clauses: list[str]) -> str:
     return base
 
 
-def _build_filters(device, ram, scenario, host, start_date, end_date) -> list[str]:
+def _build_filters(device, ram, scenario, host, start_date, end_date, build=None) -> list[str]:
     clauses = []
-    for col, val in (("Device", device), ("Ram", ram), ("Scenario", scenario), ("Host", host)):
+    for col, val in (
+        ("Device", device),
+        ("Ram", ram),
+        ("Scenario", scenario),
+        ("Host", host),
+        ("M_OSBuild", build),
+    ):
         clause = _in_clause(col, val)
         if clause:
             clauses.append(clause)
@@ -386,7 +426,7 @@ def _apply_iter_range(rows: list[dict], start_iter, end_iter) -> list[dict]:
 
 def get_filter_options() -> dict:
     """Distinct values for each independent filter, across all joined data."""
-    kql = _joined([]) + "| summarize by Device, Ram, Scenario, Host, Date"
+    kql = _joined([]) + "| summarize by Device, Ram, Scenario, Host, M_OSBuild, Date"
     rows = _run_query(kql)
     rams = sorted({r["Ram"] for r in rows if r.get("Ram")}, key=_ram_sort_key)
     return {
@@ -394,7 +434,62 @@ def get_filter_options() -> dict:
         "rams": rams,
         "scenarios": sorted({r["Scenario"] for r in rows if r.get("Scenario")}),
         "hostnames": sorted({r["Host"] for r in rows if r.get("Host")}),
+        "builds": sorted({r["M_OSBuild"] for r in rows if r.get("M_OSBuild")}),
         "dates": sorted({r["Date"] for r in rows if r.get("Date")}, reverse=True),
+    }
+
+
+def get_review_summary(start_date: str, end_date: str) -> dict:
+    """Count uploaded iterations per device and scenario for a date range."""
+    start = _safe_date(start_date)
+    end = _safe_date(end_date)
+    if not start or not end:
+        raise ValueError("Start date and end date must use yyyy-MM-dd format.")
+    if start > end:
+        raise ValueError("Start date must be on or before end date.")
+
+    kql = (
+        _meta_let()
+        + f"let _runs = {config.KUSTO_TABLE}\n"
+        "| extend TRID=tostring(TestResultId), _dt=coalesce(RunDate, BuildDate)\n"
+        f"| where isnotnull(_dt) and _dt >= datetime({start})\n"
+        f"| where _dt < datetime({end}) + 1d\n"
+        "| summarize _dt=min(_dt), TestName=take_any(TestName), "
+        "TierDisplayName=take_any(TierDisplayName) by TRID;\n"
+        "_runs\n"
+        "| join kind=inner (_meta) on TRID\n"
+        f"| extend Device = {canonical_device_kql()}, Ram = M_Ram\n"
+        "| extend Tier = iif(isnotempty(M_Tier), M_Tier, TierDisplayName)\n"
+        "| extend _prefix = strcat(Device, '_', Ram, '_')\n"
+        "| extend _scnFromTier = iif(isnotempty(Device) and isnotempty(Ram) and "
+        "(Tier startswith_cs _prefix), substring(Tier, strlen(_prefix)), Tier)\n"
+        "| extend _scnRaw = iif(isnotempty(TestName), TestName, _scnFromTier)\n"
+        "| extend Scenario = replace_regex(_scnRaw, @'_[0-9]+$', '')\n"
+        "| summarize Iterations=count(), FirstUpload=min(_dt), "
+        "LastUpload=max(_dt) by Device, Scenario\n"
+        "| project Device, Scenario, Iterations, "
+        "FirstUpload=format_datetime(FirstUpload, 'yyyy-MM-dd'), "
+        "LastUpload=format_datetime(LastUpload, 'yyyy-MM-dd')\n"
+        "| order by Device asc, Iterations desc, Scenario asc"
+    )
+    rows = _run_query(kql)
+    scenarios = [
+        {
+            "device": row.get("Device") or "Unknown",
+            "scenario": row.get("Scenario") or "Unknown",
+            "iterations": int(row.get("Iterations") or 0),
+            "first_upload": row.get("FirstUpload") or "",
+            "last_upload": row.get("LastUpload") or "",
+        }
+        for row in rows
+    ]
+    return {
+        "start_date": start,
+        "end_date": end,
+        "total_iterations": sum(row["iterations"] for row in scenarios),
+        "total_devices": len({row["device"] for row in scenarios}),
+        "total_scenarios": len({row["scenario"] for row in scenarios}),
+        "scenarios": scenarios,
     }
 
 
@@ -408,10 +503,11 @@ def get_metrics(
     last_n=None,
     start_iter=None,
     end_iter=None,
+    build: str = "",
 ) -> list[dict]:
     """Metrics matching the filters, one row per metric value. PerfMetrics names
     are split into ``MetricName`` (base) + ``Pt``; power names pass through."""
-    clauses = _build_filters(device, ram, scenario, host, start_date, end_date)
+    clauses = _build_filters(device, ram, scenario, host, start_date, end_date, build)
     kql = (
         _joined(clauses)
         + "| project Device, Ram, Scenario, Date, RunTs, TRID, Iteration, M_IterNum,\n"
@@ -560,10 +656,11 @@ def get_table_data(
     last_n=None,
     start_iter=None,
     end_iter=None,
+    build: str = "",
 ) -> list[dict]:
     """Per-iteration columns for the transposed table view (parity with
     ``json_data.get_table_data``). One column per ``TestResultId``."""
-    clauses = _build_filters(device, ram, scenario, host, start_date, end_date)
+    clauses = _build_filters(device, ram, scenario, host, start_date, end_date, build)
     kql = (
         _joined(clauses)
         + "| project Device, Ram, Scenario, Date, RunTs, Iteration, M_IterNum, SuffixIter,\n"
@@ -605,13 +702,18 @@ def get_table_data(
             elif _is(mtype, "PowerMetrics"):
                 pm_map[name] = {"value": value, "unit": unit}
             elif _is(mtype, "PerfMetrics"):
+                perf_all.append({
+                    "pt": None, "name": name, "raw_name": r.get("Name") or "",
+                    "value": value, "unit": unit,
+                })
                 parsed = _parse_perf_name(name)
                 if parsed:
                     base, pt, order = parsed
+                    perf_all[-1]["pt"] = pt
+                    perf_all[-1]["name"] = base
                     perf_pt_samples.setdefault(pt, []).append((order, value, base, unit))
                 else:
                     perf_by_name[name] = value
-                    perf_all.append({"pt": None, "name": name, "value": value, "unit": unit})
 
         if not raw_rails_only:
             apply_purwa_display_power(
@@ -646,8 +748,6 @@ def get_table_data(
         for pt, samples in perf_pt_samples.items():
             samples.sort(key=lambda x: x[0])
             perf_by_pt[pt] = [s[1] for s in samples]
-            for _order, value, base, unit in samples:
-                perf_all.append({"pt": pt, "name": base, "value": value, "unit": unit})
 
         power = {label: (calc_map[name]["value"] if name in calc_map else None)
                  for label, name in _POWER_FIELDS}

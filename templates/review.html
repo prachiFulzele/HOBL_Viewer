@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Review Summary - HOBL Dashboard{% endblock %}
+{% block heading %}Review Summary{% endblock %}
+
+{% block header_actions %}
+<nav class="header-nav" aria-label="Primary navigation">
+    <a class="header-link" href="/">Dashboard</a>
+    <a class="header-link" href="/ai">AI Analysis</a>
+</nav>
+<div class="ds-indicator ds-kusto" title="This report always reads from Kusto">
+    <span class="ds-dot"></span>
+    <span class="ds-label">Fungates (Kusto)</span>
+</div>
+{% endblock %}
+
+{% block content %}
+<main class="container review-container">
+    <div class="review-intro">
+        <h2>Uploaded iterations by device and scenario</h2>
+        <p>Select an inclusive date range to review distinct test iterations uploaded to Kusto for each device.</p>
+    </div>
+
+    <form class="filters review-filters" id="reviewForm">
+        <div class="filter-group">
+            <label for="reviewStartDate">Start Date</label>
+            <input type="date" id="reviewStartDate" required>
+        </div>
+        <div class="filter-group">
+            <label for="reviewEndDate">End Date</label>
+            <input type="date" id="reviewEndDate" required>
+        </div>
+        <div class="filter-actions">
+            <button type="submit" class="btn btn-primary" id="reviewApply">Run Summary</button>
+        </div>
+    </form>
+
+    <div id="reviewResults">
+        <div class="status">Select a date range and run the summary.</div>
+    </div>
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/review.js') }}"></script>
+{% endblock %}

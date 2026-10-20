@@ -8,7 +8,7 @@
 {% block content %}
 <div class="container">
     <!-- Filters -->
-    <div class="filters">
+    <div class="filters" id="dashboardFilters">
         <div class="filter-group">
             <label>Device</label>
             <div class="multiselect" id="deviceMS"></div>
@@ -26,6 +26,10 @@
             <div class="multiselect" id="hostMS"></div>
         </div>
         <div class="filter-group">
+            <label>Build Number</label>
+            <div class="multiselect" id="buildMS"></div>
+        </div>
+        <div class="filter-group">
             <label>Start Date</label>
             <input type="date" id="startDate">
         </div>
@@ -37,13 +41,14 @@
             <label>Last N Iterations</label>
             <input type="number" id="lastN" min="1" step="1" placeholder="All">
         </div>
-        <div class="filter-group">
+        <div class="filter-group view-filter">
             <label>View</label>
             <select id="viewSelect">
                 <option value="table">Table (Specified)</option>
                 <option value="table_all">Table (All Metrics)</option>
                 <option value="box">Box &amp; Whisker</option>
                 <option value="percentile">Percentile Distribution</option>
+                <option value="regression">Build Regression</option>
             </select>
         </div>
         <div class="filter-actions">
@@ -51,6 +56,8 @@
             <button id="resetBtn" class="btn btn-secondary">Reset</button>
         </div>
     </div>
+
+    {% include "regression_view.html" %}
 
     <!-- Results -->
     <div id="results">
@@ -79,4 +86,5 @@
 <script src="{{ url_for('static', filename='js/table.js') }}"></script>
 <script src="{{ url_for('static', filename='js/box.js') }}"></script>
 <script src="{{ url_for('static', filename='js/percentile.js') }}"></script>
+<script src="{{ url_for('static', filename='js/regression.js') }}"></script>
 {% endblock %}

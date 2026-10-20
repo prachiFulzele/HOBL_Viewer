@@ -24,6 +24,9 @@ def canonical_device_name(device_name, ihv="") -> str:
         "fun-lnl-idl-02": "FUN-LNL-IDL-02",
         "qc-hes-rot-idl-": "QC-HES-ROT-IDL-",
         "qc-hes-rotidl-1": "QC-HES-ROT-IDL-",
+        "qclampurwaidl01": "QC-LAM-PURWA-01",
+        "qc-lam-purwa-01": "QC-LAM-PURWA-01",
+        "purwa_dc": "QC-LAM-PURWA-01",
         "rom-ms-idclab-2": "ROM-MS-IDCLAB-2",
         "rom-msidclab-25": "ROM-MS-IDCLAB-2",
         "ws-lab-x26203x7": "PTL-PUE-IDL",
@@ -48,6 +51,8 @@ def canonical_device_kql(device_expr="M_Device", ihv_expr="M_IHV") -> str:
         f"{name} in ('wssi', 'wssiidc') and {ihv} == 'qc', 'QC-HES-ROT-IDL-', "
         f"{name} == 'fun-lnl-idl-02', 'FUN-LNL-IDL-02', "
         f"{name} in ('qc-hes-rot-idl-', 'qc-hes-rotidl-1'), 'QC-HES-ROT-IDL-', "
+        f"{name} in ('qclampurwaidl01', 'qc-lam-purwa-01', 'purwa_dc'), "
+        "'QC-LAM-PURWA-01', "
         f"{name} in ('rom-ms-idclab-2', 'rom-msidclab-25'), 'ROM-MS-IDCLAB-2', "
         f"{name} == 'wssiidc' and {ihv} == 'nvidia', 'Diomedes minos', "
         f"{name} in ('ws-lab-x26203x7', 'ptl-pue-idl'), 'PTL-PUE-IDL', "

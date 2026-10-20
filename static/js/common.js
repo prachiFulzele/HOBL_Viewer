@@ -151,6 +151,7 @@ const deviceMS = createMultiSelect(document.getElementById('deviceMS'), { allLab
 const ramMS = createMultiSelect(document.getElementById('ramMS'), { allLabel: 'All RAM configs', formatLabel: v => `${v} GB` });
 const scenarioMS = createMultiSelect(document.getElementById('scenarioMS'), { allLabel: 'All scenarios' });
 const hostMS = createMultiSelect(document.getElementById('hostMS'), { allLabel: 'All hosts' });
+const buildMS = createMultiSelect(document.getElementById('buildMS'), { allLabel: 'All builds' });
 
 // Close any open multi-select panel when clicking outside.
 document.addEventListener('click', () => { _allMultiSelects.forEach(ms => ms._close()); });
@@ -241,6 +242,7 @@ async function loadFilters() {
         ramMS.setOptions(opts.rams || []);
         scenarioMS.setOptions(opts.scenarios || []);
         hostMS.setOptions(opts.hostnames || []);
+        buildMS.setOptions(opts.builds || []);
         // Constrain the date pickers to the available range and default to it.
         const dates = (opts.dates || []).slice().sort();  // ascending
         if (dates.length) {
@@ -257,6 +259,7 @@ async function loadFilters() {
 // ── Apply / Reset ──────────────────────────────────────────────
 
 async function applyFilters() {
+    if (viewSelect.value === 'regression') return;
     const useLastN = lastN.value && Number(lastN.value) > 0;
     if (!useLastN && startDate.value && endDate.value && startDate.value > endDate.value) {
         showStatus('Start date must be on or before end date.', true);
@@ -267,6 +270,7 @@ async function applyFilters() {
     ramMS.getSelected().forEach(v => params.append('ram', v));
     scenarioMS.getSelected().forEach(v => params.append('scenario', v));
     hostMS.getSelected().forEach(v => params.append('host', v));
+    buildMS.getSelected().forEach(v => params.append('build', v));
     // Date range and Last-N are mutually exclusive: Last-N takes precedence.
     if (useLastN) {
         params.set('last_n', lastN.value);
@@ -299,6 +303,8 @@ async function applyFilters() {
 // The render functions live in table.js / box.js / percentile.js.
 function renderCurrentView() {
     const v = viewSelect.value;
+    setRegressionView(v === 'regression');
+    if (v === 'regression') return;
     if (v === 'box') {
         if (currentMetrics) renderBoxplots(currentMetrics);
     } else if (v === 'percentile') {
@@ -317,6 +323,7 @@ function resetFilters() {
     ramMS.clear();
     scenarioMS.clear();
     hostMS.clear();
+    buildMS.clear();
     startDate.value = startDate.min || '';
     endDate.value = endDate.max || '';
     lastN.value = '';
@@ -334,10 +341,12 @@ function activeFilterSummary() {
     const ram = ramMS.getSelected();
     const scn = scenarioMS.getSelected();
     const host = hostMS.getSelected();
+    const build = buildMS.getSelected();
     parts.push(`Device: <strong>${dev.length ? escapeHtml(dev.join(', ')) : 'All'}</strong>`);
     parts.push(`RAM: <strong>${ram.length ? escapeHtml(ram.map(r => r + ' GB').join(', ')) : 'All'}</strong>`);
     parts.push(`Scenario: <strong>${scn.length ? escapeHtml(scn.join(', ')) : 'All'}</strong>`);
     parts.push(`Host: <strong>${host.length ? escapeHtml(host.join(', ')) : 'All'}</strong>`);
+    parts.push(`Build: <strong>${build.length ? escapeHtml(build.join(', ')) : 'All'}</strong>`);
     const useLastN = lastN.value && Number(lastN.value) > 0;
     if (useLastN) {
         parts.push(`Dates: <strong>All</strong>`);
@@ -453,6 +462,7 @@ async function applyDataSource() {
         closeDsModal();
         // The underlying dataset changed: reload filter options and reset the view.
         currentMetrics = null; currentTable = null; lastParams = '';
+        resetRegressionView();
         await loadFilters();
         showStatus('Data source switched to <strong>' + escapeHtml(dsSourceLabel(d.source)) +
             '</strong>. Choose filters and click <strong>Apply</strong> to view metrics.');
@@ -489,13 +499,11 @@ function syncExclusiveFilters() {
     endDate.classList.toggle('disabled', useLastN);
 }
 
-// Some views (Box & Whisker, Percentile Distribution) describe a single
-// scenario at a time, so the scenario filter becomes single-select while they
-// are active. Multiple devices / RAM configs remain allowed (shown as separate
-// colored series).
+// Box & Whisker describes one scenario at a time. Percentile also supports
+// multiple scenarios when the fetched data contains only one device.
 function updateScenarioMode() {
     const v = viewSelect.value;
-    scenarioMS.setSingle(v === 'box' || v === 'percentile');
+    scenarioMS.setSingle(v === 'box');
 }
 
 // Wire up event listeners once every viewer module has loaded and defined its

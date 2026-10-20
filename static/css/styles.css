@@ -1,4 +1,15 @@
 /* HOBL Dashboard styles. Extracted from the original inline <style> block. */
+        .regression-worse { color: #a4262c; font-weight: 600; }
+        .regression-better { color: #107c10; font-weight: 600; }
+        #regMetric { max-width: min(520px, 80vw); }
+        #dashboardFilters.regression-view > :not(.view-filter) { display: none; }
+        .filter-group .regression-iteration-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-transform: none;
+            letter-spacing: normal;
+        }
         :root {
             --primary: #0078d4;
             --primary-dark: #005a9e;
@@ -119,9 +130,14 @@
             display: block;
         }
 
-        .ai-link {
+        .header-nav {
             margin-left: auto;
-            margin-right: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .header-link {
             color: white;
             text-decoration: none;
             font-size: 14px;
@@ -133,12 +149,45 @@
             align-items: center;
             gap: 6px;
         }
-        .ai-link:hover { background: rgba(255,255,255,0.15); }
+        .header-link:hover { background: rgba(255,255,255,0.15); }
 
         .container {
             max-width: 1800px;
             margin: 24px auto;
             padding: 0 24px;
+        }
+
+        /* ── Review summary ──────────────────────────────── */
+        .review-container { max-width: 1200px; }
+        .review-intro { margin-bottom: 18px; }
+        .review-intro h2 { font-size: 22px; margin-bottom: 5px; }
+        .review-intro p { color: var(--text-secondary); font-size: 14px; }
+        .review-filters .filter-group { max-width: 260px; }
+        .review-stats {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(180px, 260px));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .review-stat {
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--primary);
+            border-radius: 6px;
+            padding: 16px 18px;
+        }
+        .review-stat-value { display: block; font-size: 28px; font-weight: 650; }
+        .review-stat-label { color: var(--text-secondary); font-size: 13px; }
+        .review-table-scroll { overflow-x: auto; }
+        .review-table th:nth-child(-n+2), .review-table td:nth-child(-n+2) { text-align: left; }
+        .review-table th:nth-child(n+3), .review-table td:nth-child(n+3) { text-align: right; }
+        .review-empty { padding: 32px 24px; text-align: center; color: var(--text-secondary); }
+
+        @media (max-width: 760px) {
+            header { padding: 12px 16px; flex-wrap: wrap; }
+            .header-nav { order: 3; width: 100%; }
+            .header-link { flex: 1; justify-content: center; }
+            .review-stats { grid-template-columns: repeat(3, 1fr); }
         }
 
         /* ── Filters ────────────────────────────────────── */
@@ -582,6 +631,42 @@
         }
         .power-item:hover { background: #f0f6ff; }
         .power-item input { cursor: pointer; }
+        .regression-metric-picker { position: relative; }
+        .regression-metric-panel {
+            min-width: 380px;
+            max-width: min(560px, 85vw);
+        }
+        .regression-metric-actions {
+            display: flex;
+            gap: 6px;
+            position: sticky;
+            top: -10px;
+            z-index: 1;
+            margin: -10px -14px 8px;
+            padding: 10px 14px 8px;
+            background: #fff;
+            border-bottom: 1px solid var(--border);
+        }
+        .regression-metric-actions button {
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: #fff;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        .regression-metric-actions button:hover {
+            background: #f0f6ff;
+            border-color: var(--primary);
+        }
+        .regression-metric-block + .regression-metric-block {
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 2px solid var(--border);
+        }
+        .regression-metric-heading {
+            margin-bottom: 8px;
+            color: var(--primary-dark);
+        }
 
         /* ── Charts (Box & Whisker view) ────────────────── */
         .chart-card {
