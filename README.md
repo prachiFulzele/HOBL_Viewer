@@ -22,6 +22,12 @@ build filtering). With **All builds**, counts are combined across builds; select
 a build checks its counts against the same targets. Extra iterations in one
 scenario never offset another scenario's shortfall.
 
+Use **Export Excel** after loading a summary to download an `.xlsx` workbook with
+a Summary sheet and a separate sheet per device. The export includes the displayed
+date range, build selection, iteration counts, targets, remaining counts, and upload
+dates. It exports the last displayed results, not unapplied filter edits, and is
+disabled while loading or when there are no results.
+
 ---
 
 ## Who built what (handover)

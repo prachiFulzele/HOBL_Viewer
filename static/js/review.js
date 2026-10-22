@@ -4,6 +4,77 @@ const reviewEndDate = document.getElementById('reviewEndDate');
 const reviewBuild = document.getElementById('reviewBuild');
 const reviewApply = document.getElementById('reviewApply');
 const reviewResults = document.getElementById('reviewResults');
+const reviewExport = document.getElementById('reviewExport');
+let displayedReviewSummary = null;
+
+function createReviewWorkbook(data) {
+    const workbook = XLSX.utils.book_new();
+    const context = [
+        ['Review Summary'],
+        ['Start Date', data.start_date],
+        ['End Date (inclusive)', data.end_date],
+        ['Build Number', data.build || 'All builds (iterations combined)'],
+    ];
+    const summary = XLSX.utils.aoa_to_sheet([
+        ...context,
+        [],
+        ['Distinct iterations', data.total_iterations],
+        ['Devices', data.total_devices],
+        ['Scenarios', data.total_scenarios],
+    ]);
+    summary['!cols'] = [{ wch: 24 }, { wch: 38 }];
+    XLSX.utils.book_append_sheet(workbook, summary, 'Summary');
+
+    const devices = new Map();
+    data.scenarios.forEach(row => {
+        if (!devices.has(row.device)) devices.set(row.device, []);
+        devices.get(row.device).push(row);
+    });
+    const usedNames = new Set(['summary']);
+    devices.forEach((rows, device) => {
+        const baseName = String(device).replace(/[\\/?*\[\]:\x00-\x1F]/g, '_')
+            .replace(/^'+|'+$/g, '').slice(0, 31).replace(/'+$/g, '') || 'Device';
+        let name = baseName;
+        let suffix = 2;
+        while (usedNames.has(name.toLowerCase()) || name.toLowerCase() === 'history') {
+            const tail = `_${suffix++}`;
+            name = baseName.slice(0, 31 - tail.length) + tail;
+        }
+        usedNames.add(name.toLowerCase());
+        const sheet = XLSX.utils.aoa_to_sheet([
+            ...context,
+            ['Device', device],
+            [],
+            ['Scenario', 'Iterations', 'Target', 'Remaining', 'First upload', 'Last upload'],
+            ...rows.map(row => [
+                row.scenario, row.iterations, row.target, row.remaining,
+                row.first_upload || '', row.last_upload || '',
+            ]),
+        ]);
+        sheet['!cols'] = [36, 14, 14, 14, 16, 16].map(wch => ({ wch }));
+        sheet['!autofilter'] = { ref: `A7:F${7 + rows.length}` };
+        XLSX.utils.book_append_sheet(workbook, sheet, name);
+    });
+    return workbook;
+}
+
+function exportReviewSummary() {
+    if (!displayedReviewSummary || !displayedReviewSummary.scenarios.length) {
+        window.alert('Run a summary with data before exporting.');
+        return;
+    }
+    if (!window.XLSX) {
+        window.alert('Excel export is unavailable. Reload the page and try again.');
+        return;
+    }
+    try {
+        const data = displayedReviewSummary;
+        XLSX.writeFile(createReviewWorkbook(data),
+            `review_summary_${data.start_date}_${data.end_date}.xlsx`);
+    } catch (error) {
+        window.alert(`Unable to export the summary: ${error.message}`);
+    }
+}
 
 function localDateValue(date) {
     const offset = date.getTimezoneOffset() * 60000;
@@ -21,6 +92,8 @@ function setDefaultRange() {
 }
 
 function showReviewStatus(message, isError = false) {
+    displayedReviewSummary = null;
+    reviewExport.disabled = true;
     reviewResults.replaceChildren();
     const status = document.createElement('div');
     status.className = `status${isError ? ' error' : ''}`;
@@ -81,6 +154,8 @@ function reviewSection(title) {
 }
 
 function renderSummary(data) {
+    displayedReviewSummary = data;
+    reviewExport.disabled = !data.scenarios.length;
     reviewResults.replaceChildren();
     reviewBuild.replaceChildren(new Option('All builds', ''));
     data.builds.forEach(build => reviewBuild.add(new Option(build, build)));
@@ -169,6 +244,7 @@ reviewForm.addEventListener('submit', event => {
     event.preventDefault();
     loadReviewSummary();
 });
+reviewExport.addEventListener('click', exportReviewSummary);
 
 setDefaultRange();
 loadReviewSummary();

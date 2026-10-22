@@ -38,6 +38,7 @@
         </div>
         <div class="filter-actions">
             <button type="submit" class="btn btn-primary" id="reviewApply">Run Summary</button>
+            <button type="button" class="btn btn-secondary" id="reviewExport" disabled>Export Excel</button>
         </div>
     </form>
 
@@ -48,5 +49,6 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <script src="{{ url_for('static', filename='js/review.js') }}"></script>
 {% endblock %}
