@@ -10,6 +10,18 @@ performance metrics from Windows device test runs. It has two halves:
 
 Everything runs on `localhost`; no data is exposed externally.
 
+### Review Summary
+
+Open **Review Summary** to count distinct uploaded Kusto iterations in an inclusive
+date range, optionally filtered by **Build Number**. Each device has its own section.
+Targets per device/scenario are **20** for `enterprise_collab` and
+`consumer_multitasker`, and **at least 10** for all other scenarios.
+Each device table lists targets and remaining iterations, including zero-run combinations
+using all devices and scenarios found in the date range as the checklist (before
+build filtering). With **All builds**, counts are combined across builds; selecting
+a build checks its counts against the same targets. Extra iterations in one
+scenario never offset another scenario's shortfall.
+
 ---
 
 ## Who built what (handover)

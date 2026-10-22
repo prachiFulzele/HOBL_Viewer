@@ -439,8 +439,8 @@ def get_filter_options() -> dict:
     }
 
 
-def get_review_summary(start_date: str, end_date: str) -> dict:
-    """Count uploaded iterations per device and scenario for a date range."""
+def get_review_summary(start_date: str, end_date: str, build: str = "") -> dict:
+    """Count iterations and remaining targets using the date-range checklist."""
     start = _safe_date(start_date)
     end = _safe_date(end_date)
     if not start or not end:
@@ -466,29 +466,58 @@ def get_review_summary(start_date: str, end_date: str) -> dict:
         "| extend _scnRaw = iif(isnotempty(TestName), TestName, _scnFromTier)\n"
         "| extend Scenario = replace_regex(_scnRaw, @'_[0-9]+$', '')\n"
         "| summarize Iterations=count(), FirstUpload=min(_dt), "
-        "LastUpload=max(_dt) by Device, Scenario\n"
-        "| project Device, Scenario, Iterations, "
+        "LastUpload=max(_dt) by Device, Scenario, M_OSBuild\n"
+        "| project Device, Scenario, Build=M_OSBuild, Iterations, "
         "FirstUpload=format_datetime(FirstUpload, 'yyyy-MM-dd'), "
         "LastUpload=format_datetime(LastUpload, 'yyyy-MM-dd')\n"
         "| order by Device asc, Iterations desc, Scenario asc"
     )
     rows = _run_query(kql)
-    scenarios = [
-        {
-            "device": row.get("Device") or "Unknown",
-            "scenario": row.get("Scenario") or "Unknown",
-            "iterations": int(row.get("Iterations") or 0),
-            "first_upload": row.get("FirstUpload") or "",
-            "last_upload": row.get("LastUpload") or "",
-        }
-        for row in rows
-    ]
+    builds = sorted({row["Build"] for row in rows if row.get("Build")})
+    if build and build not in builds:
+        raise ValueError("Select a build available in this date range.")
+    devices = sorted({row.get("Device") or "Unknown" for row in rows})
+    scenario_names = sorted({row.get("Scenario") or "Unknown" for row in rows})
+    grouped = {}
+    for row in rows:
+        if build and row.get("Build") != build:
+            continue
+        key = (row.get("Device") or "Unknown", row.get("Scenario") or "Unknown")
+        if key not in grouped:
+            grouped[key] = {"iterations": 0, "first_upload": "", "last_upload": ""}
+        entry = grouped[key]
+        entry["iterations"] += int(row.get("Iterations") or 0)
+        first = row.get("FirstUpload") or ""
+        last = row.get("LastUpload") or ""
+        if first:
+            entry["first_upload"] = min(entry["first_upload"] or first, first)
+        entry["last_upload"] = max(entry["last_upload"], last)
+    scenarios = []
+    for device in devices:
+        for scenario in scenario_names:
+            counts = grouped.get(
+                (device, scenario), {"iterations": 0, "first_upload": "", "last_upload": ""}
+            )
+            target = 20 if scenario.lower() in (
+                "enterprise_collab", "consumer_multitasker"
+            ) else 10
+            scenarios.append({
+                "device": device,
+                "scenario": scenario,
+                **counts,
+                "target": target,
+                "remaining": max(0, target - counts["iterations"]),
+            })
     return {
         "start_date": start,
         "end_date": end,
+        "build": build,
+        "builds": builds,
         "total_iterations": sum(row["iterations"] for row in scenarios),
-        "total_devices": len({row["device"] for row in scenarios}),
-        "total_scenarios": len({row["scenario"] for row in scenarios}),
+        "total_devices": len(devices),
+        "total_scenarios": len(scenario_names),
+        "remaining_iterations": sum(row["remaining"] for row in scenarios),
+        "remaining": [row for row in scenarios if row["remaining"]],
         "scenarios": scenarios,
     }
 

@@ -224,6 +224,7 @@ def api_review_summary():
         return jsonify(kusto_data.get_review_summary(
             request.args.get("start_date", ""),
             request.args.get("end_date", ""),
+            request.args.get("build", ""),
         ))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400

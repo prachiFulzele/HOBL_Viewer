@@ -18,7 +18,7 @@
 <main class="container review-container">
     <div class="review-intro">
         <h2>Uploaded iterations by device and scenario</h2>
-        <p>Select an inclusive date range to review distinct test iterations uploaded to Kusto for each device.</p>
+        <p>Review distinct Kusto iterations by device and build. Targets: 20 for enterprise_collab and consumer_multitasker; at least 10 for all other scenarios.</p>
     </div>
 
     <form class="filters review-filters" id="reviewForm">
@@ -29,6 +29,12 @@
         <div class="filter-group">
             <label for="reviewEndDate">End Date</label>
             <input type="date" id="reviewEndDate" required>
+        </div>
+        <div class="filter-group">
+            <label for="reviewBuild">Build Number</label>
+            <select id="reviewBuild">
+                <option value="">All builds</option>
+            </select>
         </div>
         <div class="filter-actions">
             <button type="submit" class="btn btn-primary" id="reviewApply">Run Summary</button>
