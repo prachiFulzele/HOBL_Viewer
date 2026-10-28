@@ -165,7 +165,7 @@
         .review-filters .filter-group { max-width: 260px; }
         .review-stats {
             display: grid;
-            grid-template-columns: repeat(3, minmax(180px, 260px));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 12px;
             margin-bottom: 18px;
         }

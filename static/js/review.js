@@ -21,8 +21,11 @@ function createReviewWorkbook(data) {
         ['Distinct iterations', data.total_iterations],
         ['Devices', data.total_devices],
         ['Scenarios', data.total_scenarios],
+        ['Total run hours', data.total_run_hours],
+        ['Iterations missing record time', data.missing_record_time],
     ]);
     summary['!cols'] = [{ wch: 24 }, { wch: 38 }];
+    summary.B9.z = '0.00';
     XLSX.utils.book_append_sheet(workbook, summary, 'Summary');
 
     const devices = new Map();
@@ -44,15 +47,19 @@ function createReviewWorkbook(data) {
         const sheet = XLSX.utils.aoa_to_sheet([
             ...context,
             ['Device', device],
-            [],
-            ['Scenario', 'Iterations', 'Target', 'Remaining', 'First upload', 'Last upload'],
+            ['Device run hours', rows.reduce((total, row) => total + row.run_hours, 0)],
+            ['Scenario', 'Iterations', 'Target', 'Remaining', 'First upload', 'Last upload',
+                'Run hours', 'Missing record time'],
             ...rows.map(row => [
                 row.scenario, row.iterations, row.target, row.remaining,
                 row.first_upload || '', row.last_upload || '',
+                row.run_hours, row.missing_record_time,
             ]),
         ]);
-        sheet['!cols'] = [36, 14, 14, 14, 16, 16].map(wch => ({ wch }));
-        sheet['!autofilter'] = { ref: `A7:F${7 + rows.length}` };
+        sheet['!cols'] = [36, 14, 14, 14, 16, 16, 16, 22].map(wch => ({ wch }));
+        sheet['!autofilter'] = { ref: `A7:H${7 + rows.length}` };
+        rows.forEach((row, index) => { sheet[`G${8 + index}`].z = '0.00'; });
+        sheet.B6.z = '0.00';
         XLSX.utils.book_append_sheet(workbook, sheet, name);
     });
     return workbook;
@@ -101,12 +108,14 @@ function showReviewStatus(message, isError = false) {
     reviewResults.appendChild(status);
 }
 
-function stat(value, label) {
+function stat(value, label, decimals = 0) {
     const item = document.createElement('div');
     item.className = 'review-stat';
     const valueElement = document.createElement('span');
     valueElement.className = 'review-stat-value';
-    valueElement.textContent = Number(value).toLocaleString();
+    valueElement.textContent = Number(value).toLocaleString(undefined, {
+        minimumFractionDigits: decimals, maximumFractionDigits: decimals,
+    });
     const labelElement = document.createElement('span');
     labelElement.className = 'review-stat-label';
     labelElement.textContent = label;
@@ -120,7 +129,8 @@ function appendReviewTable(container, rows) {
     const table = document.createElement('table');
     table.className = 'review-table review-progress-table';
     const head = table.createTHead().insertRow();
-    const labels = ['Scenario', 'Iterations', 'Target', 'Remaining', 'First upload', 'Last upload'];
+    const labels = ['Scenario', 'Iterations', 'Target', 'Remaining', 'First upload', 'Last upload',
+        'Run hours', 'Missing record time'];
     labels.forEach(label => {
         const cell = document.createElement('th');
         cell.textContent = label;
@@ -133,6 +143,9 @@ function appendReviewTable(container, rows) {
         const values = [
             row.scenario, Number(row.iterations).toLocaleString(),
             row.target, row.remaining, row.first_upload || '-', row.last_upload || '-',
+            Number(row.run_hours).toLocaleString(undefined, {
+                minimumFractionDigits: 2, maximumFractionDigits: 2,
+            }), row.missing_record_time,
         ];
         values.forEach(value => {
             const cell = tr.insertCell();
@@ -167,6 +180,7 @@ function renderSummary(data) {
         stat(data.total_iterations, 'Distinct iterations'),
         stat(data.total_devices, 'Devices'),
         stat(data.total_scenarios, 'Scenarios'),
+        stat(data.total_run_hours, 'Total run hours', 2),
     );
     reviewResults.appendChild(stats);
 
@@ -177,6 +191,12 @@ function renderSummary(data) {
     summary.textContent = `${data.start_date} through ${data.end_date} (inclusive) | ` +
         (data.build ? `Build ${data.build}` : 'All builds (iterations combined)');
     wrapper.appendChild(summary);
+    const coverage = document.createElement('div');
+    coverage.className = 'results-summary';
+    coverage.textContent = 'Run hours = sum of record_time (minutes) / 60, counted once per iteration. ' +
+        'Concurrent runs are added, not elapsed calendar time. ' +
+        `${data.missing_record_time} iteration(s) have missing or invalid record time and are excluded.`;
+    wrapper.appendChild(coverage);
 
     if (!data.scenarios.length) {
         const empty = document.createElement('div');
@@ -194,7 +214,8 @@ function renderSummary(data) {
         devices.get(row.device).push(row);
     });
     devices.forEach((rows, device) => {
-        const section = reviewSection(device);
+        const hours = rows.reduce((total, row) => total + row.run_hours, 0);
+        const section = reviewSection(`${device} | ${hours.toFixed(2)} run hours`);
         appendReviewTable(section, rows);
         reviewResults.appendChild(section);
     });

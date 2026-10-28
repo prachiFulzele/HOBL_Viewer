@@ -454,7 +454,9 @@ def get_review_summary(start_date: str, end_date: str, build: str = "") -> dict:
         "| extend TRID=tostring(TestResultId), _dt=coalesce(RunDate, BuildDate)\n"
         f"| where isnotnull(_dt) and _dt >= datetime({start})\n"
         f"| where _dt < datetime({end}) + 1d\n"
-        "| summarize _dt=min(_dt), TestName=take_any(TestName), "
+        "| summarize _recordMinutes=maxif(todouble(Value), Name =~ 'record_time' "
+        "and Unit =~ 'min' and isfinite(todouble(Value)) and todouble(Value) >= 0), "
+        "_dt=min(_dt), TestName=take_any(TestName), "
         "TierDisplayName=take_any(TierDisplayName) by TRID;\n"
         "_runs\n"
         "| join kind=inner (_meta) on TRID\n"
@@ -465,9 +467,10 @@ def get_review_summary(start_date: str, end_date: str, build: str = "") -> dict:
         "(Tier startswith_cs _prefix), substring(Tier, strlen(_prefix)), Tier)\n"
         "| extend _scnRaw = iif(isnotempty(TestName), TestName, _scnFromTier)\n"
         "| extend Scenario = replace_regex(_scnRaw, @'_[0-9]+$', '')\n"
-        "| summarize Iterations=count(), FirstUpload=min(_dt), "
+        "| summarize Iterations=count(), RecordedMinutes=sum(_recordMinutes), "
+        "RecordedIterations=countif(isnotnull(_recordMinutes)), FirstUpload=min(_dt), "
         "LastUpload=max(_dt) by Device, Scenario, M_OSBuild\n"
-        "| project Device, Scenario, Build=M_OSBuild, Iterations, "
+        "| project Device, Scenario, Build=M_OSBuild, Iterations, RecordedMinutes, RecordedIterations, "
         "FirstUpload=format_datetime(FirstUpload, 'yyyy-MM-dd'), "
         "LastUpload=format_datetime(LastUpload, 'yyyy-MM-dd')\n"
         "| order by Device asc, Iterations desc, Scenario asc"
@@ -484,9 +487,14 @@ def get_review_summary(start_date: str, end_date: str, build: str = "") -> dict:
             continue
         key = (row.get("Device") or "Unknown", row.get("Scenario") or "Unknown")
         if key not in grouped:
-            grouped[key] = {"iterations": 0, "first_upload": "", "last_upload": ""}
+            grouped[key] = {
+                "iterations": 0, "recorded_minutes": 0.0, "recorded_iterations": 0,
+                "first_upload": "", "last_upload": "",
+            }
         entry = grouped[key]
         entry["iterations"] += int(row.get("Iterations") or 0)
+        entry["recorded_minutes"] += float(row.get("RecordedMinutes") or 0)
+        entry["recorded_iterations"] += int(row.get("RecordedIterations") or 0)
         first = row.get("FirstUpload") or ""
         last = row.get("LastUpload") or ""
         if first:
@@ -496,7 +504,10 @@ def get_review_summary(start_date: str, end_date: str, build: str = "") -> dict:
     for device in devices:
         for scenario in scenario_names:
             counts = grouped.get(
-                (device, scenario), {"iterations": 0, "first_upload": "", "last_upload": ""}
+                (device, scenario), {
+                    "iterations": 0, "recorded_minutes": 0.0, "recorded_iterations": 0,
+                    "first_upload": "", "last_upload": "",
+                }
             )
             target = 20 if scenario.lower() in (
                 "enterprise_collab", "consumer_multitasker"
@@ -505,6 +516,8 @@ def get_review_summary(start_date: str, end_date: str, build: str = "") -> dict:
                 "device": device,
                 "scenario": scenario,
                 **counts,
+                "run_hours": counts["recorded_minutes"] / 60,
+                "missing_record_time": counts["iterations"] - counts["recorded_iterations"],
                 "target": target,
                 "remaining": max(0, target - counts["iterations"]),
             })
@@ -514,6 +527,8 @@ def get_review_summary(start_date: str, end_date: str, build: str = "") -> dict:
         "build": build,
         "builds": builds,
         "total_iterations": sum(row["iterations"] for row in scenarios),
+        "total_run_hours": sum(row["recorded_minutes"] for row in scenarios) / 60,
+        "missing_record_time": sum(row["missing_record_time"] for row in scenarios),
         "total_devices": len(devices),
         "total_scenarios": len(scenario_names),
         "remaining_iterations": sum(row["remaining"] for row in scenarios),

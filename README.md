@@ -28,6 +28,14 @@ date range, build selection, iteration counts, targets, remaining counts, and up
 dates. It exports the last displayed results, not unapplied filter edits, and is
 disabled while loading or when there are no results.
 
+Review Summary also reports **total run hours**, per-device totals, and per-scenario
+hours in the UI and Excel export. Hours are the sum of Kusto `record_time` values
+(stored in minutes), counted once per `TestResultId`, divided by 60, under the same
+date/build filters. Repeated record-time metrics within a run use the maximum valid
+value rather than being added. Concurrent runs contribute independently; this is
+not elapsed calendar time. Missing, negative, non-finite, or non-minute record times
+are excluded and the number of affected iterations is shown explicitly.
+
 ---
 
 ## Who built what (handover)

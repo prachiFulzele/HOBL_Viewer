@@ -77,6 +77,42 @@ class ReviewSummaryTests(unittest.TestCase):
         self.assertEqual(result["scenarios"], [])
         self.assertEqual(result["remaining_iterations"], 0)
         self.assertEqual(result["builds"], [])
+        self.assertEqual(result["total_run_hours"], 0)
+        self.assertEqual(result["missing_record_time"], 0)
+
+    def test_record_time_hours_and_coverage_across_builds(self):
+        first = {**run("A", "youtube", 3), "RecordedMinutes": 90, "RecordedIterations": 2}
+        second = {
+            **run("A", "youtube", 2, "build-2"),
+            "RecordedMinutes": 45, "RecordedIterations": 2,
+        }
+        result = self.summary([first, second])
+        self.assertEqual(result["total_run_hours"], 2.25)
+        self.assertEqual(result["scenarios"][0]["run_hours"], 2.25)
+        self.assertEqual(result["missing_record_time"], 1)
+        filtered = self.summary([first, second], "build-2")
+        self.assertEqual(filtered["total_run_hours"], 0.75)
+        self.assertEqual(filtered["missing_record_time"], 0)
+
+    def test_missing_record_time_does_not_mean_zero_duration_coverage(self):
+        result = self.summary([run("A", "youtube", 4), run("B", "enterprise_collab", 2)])
+        self.assertEqual(result["total_run_hours"], 0)
+        self.assertEqual(result["missing_record_time"], 6)
+        zero_run = next(row for row in result["scenarios"]
+                        if row["device"] == "B" and row["scenario"] == "youtube")
+        self.assertEqual(zero_run["run_hours"], 0)
+        self.assertEqual(zero_run["missing_record_time"], 0)
+
+    def test_record_time_query_deduplicates_and_validates_minutes(self):
+        with patch("kusto_data._run_query", return_value=[]) as query:
+            kusto_data.get_review_summary("2026-10-16", "2026-10-22")
+        kql = query.call_args.args[0]
+        self.assertIn("_recordMinutes=maxif(todouble(Value)", kql)
+        self.assertIn("Name =~ 'record_time'", kql)
+        self.assertIn("Unit =~ 'min'", kql)
+        self.assertIn("isfinite(todouble(Value)) and todouble(Value) >= 0", kql)
+        self.assertIn("RecordedMinutes=sum(_recordMinutes)", kql)
+        self.assertIn("RecordedIterations=countif(isnotnull(_recordMinutes))", kql)
 
     def test_invalid_build_and_dates(self):
         with patch("kusto_data._run_query", return_value=[run("A", "youtube", 1)]):
